@@ -1,0 +1,26 @@
+# Repository instructions
+
+- Work on exactly one phase at a time. Never continue without an explicit `START PHASE N` command.
+- Never skip validation. Update `docs/phase_status.md` at the end of each phase.
+- Do not create, modify, or run automated tests until `ENABLE AUTOMATED TESTS` is explicitly provided. Do not add testing libraries, fixtures, or hidden test scripts.
+- Use only a QuickBooks sandbox until production-readiness is explicitly approved. Do not send unapproved real QuickBooks writes.
+- Write idiomatic Ruby and Rails. Start with official Rails conventions and preserve an obvious request flow.
+- Inspect relevant current Rails references before introducing a new architectural pattern and record the research in `docs/reference_review.md`.
+- Do not copy large-application patterns without proving they solve a current problem. Prefer Rails built-ins over gems.
+- Do not create `ApplicationService`, another generic service base class, or a generic repository layer over Active Record.
+- Do not add Packwerk or create internal Rails Engines without explicit approval following a modularity review.
+- Avoid premature abstraction, clever metaprogramming, and generic names. Use explicit domain language.
+- Never log OAuth tokens or client secrets. Never return tokens in JSON, expose them in HTML, or commit credentials.
+- Never invent QuickBooks fields or entity support. Check current official Intuit documentation before implementing an entity and record findings in `docs/references.md`.
+- Keep controllers focused on HTTP concerns. Keep accounting validation, QuickBooks payload construction, and HTTP calls outside controllers.
+- Avoid a giant generic QuickBooks service. Centralize HTTP infrastructure while keeping entity-specific accounting policy outside it.
+- Use decimal-safe monetary handling and never Ruby floating point for money. Accept decimal strings, use `BigDecimal`, and persist explicit decimal precision and scale.
+- Use ISO 8601 dates.
+- Maintain source-to-QuickBooks ID mappings, idempotency records, and synchronization/audit records when write phases introduce them.
+- Scope QuickBooks identifiers, mappings, and operations by connection. Never assume a QuickBooks entity ID is globally unique.
+- Preserve original incoming data locally when traceability requires it.
+- Use database constraints for critical integrity. Do not hold a database transaction open across an external HTTP call.
+- Preserve unrelated user changes. Never use destructive Git commands, force-push, or create a commit unless explicitly requested.
+- Clearly distinguish native QuickBooks records from local-only CFO data. Do not use QuickBooks notes or custom fields as a general JSON database.
+- Clearly mark manual sandbox work Codex did not execute. Do not report a write as validated from HTTP success alone; use readback and report reconciliation where practical.
+- Do not refactor multiple phases without explicit approval.

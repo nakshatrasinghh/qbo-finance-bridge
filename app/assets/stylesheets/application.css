@@ -1,0 +1,261 @@
+/*
+ * This is a manifest file that'll be compiled into application.css.
+ *
+ * With Propshaft, assets are served efficiently without preprocessing steps. You can still include
+ * application-wide styles in this file, but keep in mind that CSS precedence will follow the standard
+ * cascading order, meaning styles declared later in the document or manifest will override earlier ones,
+ * depending on specificity.
+ *
+ * Consider organizing styles into separate files for maintainability.
+ */
+
+body {
+  color: #1f2933;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  margin: 0;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 80rem;
+  padding: 2rem;
+}
+
+section {
+  border-top: 1px solid #d9e2ec;
+  margin-top: 2rem;
+  padding-top: 1rem;
+}
+
+.form-grid {
+  display: grid;
+  gap: 0 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.filter-panel {
+  background: #f8fafc;
+  border: 1px solid #d9e2ec;
+  border-radius: 0.35rem;
+  padding: 1rem;
+}
+
+.filter-grid {
+  display: grid;
+  gap: 0 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.filter-grid p {
+  margin: 0 0 1rem;
+}
+
+.filter-grid label {
+  font-weight: 600;
+}
+
+.filter-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.pagination-actions {
+  margin-bottom: 0;
+}
+
+.report-metadata {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  margin: 1rem 0;
+}
+
+.report-metadata[hidden] {
+  display: none;
+}
+
+.report-metadata div {
+  background: #f8fafc;
+  border: 1px solid #d9e2ec;
+  border-radius: 0.35rem;
+  padding: 0.75rem;
+}
+
+.report-metadata dt {
+  color: #526d82;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.report-metadata dd {
+  font-weight: 650;
+  margin: 0.2rem 0 0;
+}
+
+input,
+select,
+button {
+  font: inherit;
+  max-width: 100%;
+}
+
+input,
+select {
+  box-sizing: border-box;
+  padding: 0.5rem;
+  width: 100%;
+}
+
+button,
+input[type="submit"] {
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  width: auto;
+}
+
+button:disabled,
+input[type="submit"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.secondary-action {
+  background: #ffffff;
+  border: 1px solid #829ab1;
+  color: #243b53;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th,
+td {
+  border-bottom: 1px solid #d9e2ec;
+  padding: 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: #f0f4f8;
+}
+
+.financial-report-label {
+  padding-left: calc(0.65rem + (var(--report-depth) * 1.1rem));
+}
+
+.financial-report-money {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.financial-report-section {
+  background: #f8fafc;
+  font-weight: 650;
+}
+
+.financial-report-summary {
+  border-top: 1px solid #9fb3c8;
+  font-weight: 650;
+}
+
+.audit-status {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.audit-status-succeeded {
+  color: #176b3a;
+}
+
+.audit-status-pending,
+.audit-status-uncertain {
+  color: #8a4b08;
+}
+
+.audit-status-rejected {
+  color: #9b1c1c;
+}
+
+[role="alert"] {
+  color: #9b1c1c;
+}
+
+[role="status"] {
+  color: #176b3a;
+}
+
+.api-status-error {
+  color: #9b1c1c;
+}
+
+.api-alert {
+  align-items: flex-start;
+  background: #fff5f5;
+  border: 1px solid #e0a3a3;
+  border-left: 0.35rem solid #b42318;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin: 1.5rem 0;
+  padding: 1rem;
+}
+
+.api-alert[hidden] {
+  display: none;
+}
+
+.api-alert p {
+  margin: 0.25rem 0 0;
+}
+
+.api-alert button {
+  background: #ffffff;
+  border: 1px solid #b42318;
+  color: #7a271a;
+  flex: none;
+}
+
+.capability-note {
+  background: #f0f7ff;
+  border: 1px solid #9fb3c8;
+  border-left: 0.35rem solid #486581;
+  margin: 1.5rem 0;
+  padding: 1rem;
+}
+
+.capability-note h2 {
+  margin-top: 0;
+}
+
+.danger-note {
+  background: #fff8e6;
+  border-left: 0.35rem solid #b7791f;
+  padding: 0.75rem 1rem;
+}
+
+.api-docs {
+  max-width: none;
+  padding: 0;
+}
+
+.api-docs-intro {
+  margin: 0 auto;
+  max-width: 80rem;
+  padding: 2rem 2rem 0;
+}
+
+.api-docs noscript > p,
+.api-docs > [role="alert"] {
+  margin: 2rem;
+}

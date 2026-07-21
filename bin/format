@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "rubygems"
+require "bundler/setup"
+
+root = File.expand_path("..", __dir__)
+Dir.chdir(root)
+
+command = ARGV.shift || "write"
+abort "Usage: bin/format [write|check]" unless %w[write check].include?(command) && ARGV.empty?
+
+ruby_files = Dir.glob("{app,config,db/migrate,lib}/**/*.rb")
+ruby_files << "db/seeds.rb"
+ruby_files.concat(%w[Gemfile Rakefile config.ru])
+ruby_files.concat(
+  Dir
+    .glob("bin/*")
+    .select do |path|
+      File.file?(path) && File.foreach(path).first&.start_with?("#!/usr/bin/env ruby")
+    end
+)
+
+ARGV.replace([command, *ruby_files.uniq.sort])
+load Gem.bin_path("syntax_tree", "stree")

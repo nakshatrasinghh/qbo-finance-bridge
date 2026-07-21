@@ -1,0 +1,14 @@
+# Syntax Tree owns deterministic formatting. Rails Omakase retains the remaining lint rules.
+inherit_gem:
+  syntax_tree: config/rubocop.yml
+  rubocop-rails-omakase: rubocop.yml
+
+# Syntax Tree cannot wrap long SQL/check-constraint string literals.
+Layout/LineLength:
+  Max: 140
+
+# Overwrite or add rules to create your own house style
+#
+# # Use `[a, [b, c]]` not `[ a, [ b, c ] ]`
+# Layout/SpaceInsideArrayLiteralBrackets:
+#   Enabled: false

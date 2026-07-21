@@ -1,0 +1,50 @@
+<% content_for :title, "QuickBooks sandbox connections" %>
+
+<main>
+  <h1>QuickBooks sandbox connections</h1>
+
+  <% if notice.present? %>
+    <p role="status"><%= notice %></p>
+  <% end %>
+
+  <% if alert.present? %>
+    <p role="alert"><%= alert %></p>
+  <% end %>
+
+  <p>This development dashboard never displays OAuth tokens or client secrets.</p>
+
+  <% if @configuration_error %>
+    <p role="alert"><strong>Configuration:</strong> <%= @configuration_error.message %></p>
+  <% else %>
+    <p><%= link_to "Connect a QuickBooks sandbox", connect_quickbooks_connections_path %></p>
+  <% end %>
+
+  <% if @connections.any? %>
+    <table>
+      <thead>
+        <tr>
+          <th>Realm ID</th>
+          <th>Environment</th>
+          <th>Status</th>
+          <th>Access expires</th>
+          <th>Updated</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @connections.each do |connection| %>
+          <tr>
+            <td><%= connection.realm_id %></td>
+            <td><%= connection.environment %></td>
+            <td><%= connection.status %></td>
+            <td><%= connection.access_token_expires_at&.iso8601 || "—" %></td>
+            <td><%= connection.updated_at.iso8601 %></td>
+            <td><%= link_to "Inspect", quickbooks_connection_path(connection) %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  <% else %>
+    <p>No sandbox company has been connected.</p>
+  <% end %>
+</main>

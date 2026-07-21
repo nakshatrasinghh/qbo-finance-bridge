@@ -1,0 +1,251 @@
+<% content_for :title, "QuickBooks workforce, tax, and inventory operations" %>
+<% content_for :head do %>
+  <%= javascript_include_tag "operational_capabilities", defer: true, "data-turbo-track": "reload" %>
+<% end %>
+
+<main data-operational-capabilities
+      data-employees-url="<%= api_v1_quickbooks_connection_employees_path(@connection) %>"
+      data-time-activities-url="<%= api_v1_quickbooks_connection_time_activities_path(@connection) %>"
+      data-tax-codes-url="<%= api_v1_quickbooks_connection_tax_codes_path(@connection) %>"
+      data-inventory-items-url="<%= api_v1_quickbooks_connection_inventory_items_path(@connection) %>">
+  <p>
+    <%= link_to "Company connection", quickbooks_connection_path(@connection) %>
+    ·
+    <%= link_to "Financial records dashboard", quickbooks_connection_journal_entries_path(@connection) %>
+    ·
+    <%= link_to "Sales and payables dashboard", quickbooks_connection_transactions_path(@connection) %>
+    ·
+    <%= link_to "API documentation", api_docs_path %>
+  </p>
+
+  <h1>QuickBooks workforce, tax, and inventory operations</h1>
+  <p>
+    Read the QuickBooks sandbox through JSON GET APIs and create one explicitly confirmed record through each
+    supported POST API. Every POST is idempotent, audited locally, and read back before Rails reports success.
+  </p>
+
+  <div id="operations-api-alert" class="api-alert" role="alert" hidden>
+    <div>
+      <strong id="operations-api-alert-title">API request failed</strong>
+      <p id="operations-api-alert-message"></p>
+    </div>
+    <button type="button" data-dismiss-operations-alert aria-label="Dismiss API error">Dismiss</button>
+  </div>
+
+  <p id="operations-api-status" role="status">Loading supported capabilities through Rails APIs…</p>
+
+  <aside class="capability-note" aria-labelledby="phase-13-boundary">
+    <h2 id="phase-13-boundary">Supported boundary</h2>
+    <p>
+      Intuit's full Payroll API is closed beta and this sandbox reports Payroll disabled. This page can manage
+      public Accounting API Employee records and employee TimeActivity records; it cannot run payroll, calculate
+      wages, create paychecks, manage deductions, or file payroll taxes.
+    </p>
+    <p>
+      Tax POST creates one TaxCode from an existing QuickBooks TaxRate. Inventory POST creates one Inventory Item
+      using existing income, cost-of-goods-sold, and inventory-asset Accounts. It does not create tax agencies,
+      Accounts, inventory adjustments, purchases, or sales.
+    </p>
+  </aside>
+
+  <section aria-labelledby="employees-heading">
+    <h2 id="employees-heading">Employees — GET and POST</h2>
+    <p>
+      Employee records are non-posting workforce directory data. This application accepts only names, optional
+      email, and optional phone; it never accepts SSN, birth date, address, pay rate, or compensation.
+    </p>
+
+    <%= form_with url: api_v1_quickbooks_connection_employees_path(@connection),
+                  scope: :employee,
+                  method: :post,
+                  class: "filter-panel",
+                  data: { employee_create_form: true } do |form| %>
+      <div class="form-grid">
+        <p>
+          <%= form.label :given_name, "Given name" %><br>
+          <%= form.text_field :given_name, required: true, maxlength: 100 %>
+        </p>
+        <p>
+          <%= form.label :family_name, "Family name" %><br>
+          <%= form.text_field :family_name, required: true, maxlength: 100 %>
+        </p>
+        <p>
+          <%= form.label :email %><br>
+          <%= form.email_field :email, maxlength: 100 %>
+        </p>
+        <p>
+          <%= form.label :phone %><br>
+          <%= form.telephone_field :phone, maxlength: 20 %>
+        </p>
+      </div>
+      <%= form.submit "POST Employee to QuickBooks sandbox", disabled: true %>
+    <% end %>
+
+    <p id="employees-summary">Waiting for the Employees GET API…</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">ID</th><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Phone</th></tr></thead>
+        <tbody id="employees-rows"><tr><td colspan="4">Loading Employees…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="time-activities-heading">
+    <h2 id="time-activities-heading">Employee time activities — GET and POST</h2>
+    <p class="danger-note">
+      A TimeActivity is a real QuickBooks transaction record with a posting date. It records time only; this app
+      does not convert it into payroll or an invoice.
+    </p>
+
+    <%= form_with url: api_v1_quickbooks_connection_time_activities_path(@connection),
+                  scope: :time_activity,
+                  method: :post,
+                  class: "filter-panel",
+                  data: { time_activity_create_form: true } do |form| %>
+      <div class="form-grid">
+        <p>
+          <%= form.label :employee_id, "Employee" %><br>
+          <%= form.select :employee_id, [ [ "Loading Employees…", "" ] ], {}, required: true %>
+        </p>
+        <p>
+          <%= form.label :txn_date, "Work date" %><br>
+          <%= form.date_field :txn_date, value: Date.current.iso8601, required: true %>
+        </p>
+        <p>
+          <%= form.label :hours %><br>
+          <%= form.number_field :hours, value: 1, min: 0, max: 8760, step: 1, required: true %>
+        </p>
+        <p>
+          <%= form.label :minutes %><br>
+          <%= form.number_field :minutes, value: 0, min: 0, max: 59, step: 1, required: true %>
+        </p>
+      </div>
+      <p>
+        <%= form.label :description %><br>
+        <%= form.text_field :description, required: true, maxlength: 500,
+                            placeholder: "Work performed" %>
+      </p>
+      <%= form.submit "POST TimeActivity to QuickBooks sandbox", disabled: true %>
+    <% end %>
+
+    <p id="time-activities-summary">Waiting for the TimeActivities GET API…</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">ID</th><th scope="col">Date</th><th scope="col">Employee</th><th scope="col">Time</th><th scope="col">Description</th></tr></thead>
+        <tbody id="time-activities-rows"><tr><td colspan="5">Loading TimeActivities…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="tax-codes-heading">
+    <h2 id="tax-codes-heading">Tax configuration — GET and POST</h2>
+    <p class="danger-note">
+      This creates a real TaxCode using one existing system-visible TaxRate. It does not calculate transaction tax,
+      create an agency or rate, file a return, or make a tax payment.
+    </p>
+
+    <%= form_with url: api_v1_quickbooks_connection_tax_codes_path(@connection),
+                  scope: :tax_code,
+                  method: :post,
+                  class: "filter-panel",
+                  data: { tax_code_create_form: true } do |form| %>
+      <div class="form-grid">
+        <p>
+          <%= form.label :name, "New tax code name" %><br>
+          <%= form.text_field :name, required: true, maxlength: 100 %>
+        </p>
+        <p>
+          <%= form.label :tax_rate_id, "Existing QuickBooks tax rate" %><br>
+          <%= form.select :tax_rate_id, [ [ "Loading TaxRates…", "" ] ], {}, required: true %>
+        </p>
+        <p>
+          <%= form.label :applicable_on, "Applicable on" %><br>
+          <%= form.select :applicable_on, [ [ "Sales", "Sales" ], [ "Purchases", "Purchase" ] ] %>
+        </p>
+      </div>
+      <%= form.submit "POST TaxCode to QuickBooks sandbox", disabled: true %>
+    <% end %>
+
+    <p id="tax-codes-summary">Waiting for the TaxCodes GET API…</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">ID</th><th scope="col">Tax code</th><th scope="col">Taxable</th><th scope="col">Sales rates</th><th scope="col">Purchase rates</th></tr></thead>
+        <tbody id="tax-codes-rows"><tr><td colspan="5">Loading TaxCodes…</td></tr></tbody>
+      </table>
+    </div>
+
+    <h3>Available TaxRates</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">ID</th><th scope="col">Rate</th><th scope="col">Percent</th><th scope="col">Agency</th></tr></thead>
+        <tbody id="tax-rates-rows"><tr><td colspan="4">Loading TaxRates…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="inventory-items-heading">
+    <h2 id="inventory-items-heading">Inventory items — GET and POST</h2>
+    <p class="danger-note">
+      This creates a real Inventory Item. A positive opening quantity combined with purchase cost can affect
+      inventory value and financial reports. Use zero quantity when only establishing the item master record.
+    </p>
+
+    <%= form_with url: api_v1_quickbooks_connection_inventory_items_path(@connection),
+                  scope: :inventory_item,
+                  method: :post,
+                  class: "filter-panel",
+                  data: { inventory_item_create_form: true } do |form| %>
+      <div class="form-grid">
+        <p>
+          <%= form.label :name, "Item name" %><br>
+          <%= form.text_field :name, required: true, maxlength: 100 %>
+        </p>
+        <p>
+          <%= form.label :sku, "SKU" %><br>
+          <%= form.text_field :sku, maxlength: 100 %>
+        </p>
+        <p>
+          <%= form.label :inventory_start_date, "Inventory start date" %><br>
+          <%= form.date_field :inventory_start_date, value: Date.current.iso8601, required: true %>
+        </p>
+        <p>
+          <%= form.label :quantity_on_hand, "Opening quantity" %><br>
+          <%= form.number_field :quantity_on_hand, value: "0", min: "0", step: "0.00001", required: true %>
+        </p>
+        <p>
+          <%= form.label :purchase_cost, "Purchase cost" %><br>
+          <%= form.number_field :purchase_cost, min: "0", step: "0.01", placeholder: "0.00" %>
+        </p>
+        <p>
+          <%= form.label :unit_price, "Sales price" %><br>
+          <%= form.number_field :unit_price, min: "0", step: "0.01", placeholder: "0.00" %>
+        </p>
+        <p>
+          <%= form.label :income_account_id, "Sales income account" %><br>
+          <%= form.select :income_account_id, [ [ "Loading eligible Accounts…", "" ] ], {}, required: true %>
+        </p>
+        <p>
+          <%= form.label :expense_account_id, "Cost of goods sold account" %><br>
+          <%= form.select :expense_account_id, [ [ "Loading eligible Accounts…", "" ] ], {}, required: true %>
+        </p>
+        <p>
+          <%= form.label :asset_account_id, "Inventory asset account" %><br>
+          <%= form.select :asset_account_id, [ [ "Loading eligible Accounts…", "" ] ], {}, required: true %>
+        </p>
+      </div>
+      <p>
+        <%= form.label :description %><br>
+        <%= form.text_field :description, maxlength: 500 %>
+      </p>
+      <%= form.submit "POST Inventory Item to QuickBooks sandbox", disabled: true %>
+    <% end %>
+
+    <p id="inventory-items-summary">Waiting for the InventoryItems GET API…</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">ID</th><th scope="col">Item</th><th scope="col">SKU</th><th scope="col">Quantity</th><th scope="col">Purchase cost</th><th scope="col">Sales price</th></tr></thead>
+        <tbody id="inventory-items-rows"><tr><td colspan="6">Loading inventory Items…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>

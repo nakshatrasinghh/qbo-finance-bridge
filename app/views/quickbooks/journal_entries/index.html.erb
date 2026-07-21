@@ -1,0 +1,280 @@
+<% content_for :title, "QuickBooks financial records API dashboard" %>
+<% content_for :head do %>
+  <%= javascript_include_tag "financial_records", defer: true, "data-turbo-track": "reload" %>
+<% end %>
+
+<main data-financial-records-dashboard
+      data-accounts-url="<%= api_v1_quickbooks_connection_accounts_path(@connection) %>"
+      data-journal-entries-url="<%= api_v1_quickbooks_connection_journal_entries_path(@connection) %>"
+      data-audit-history-url="<%= api_v1_quickbooks_connection_journal_entry_operations_path(@connection) %>"
+      data-profit-and-loss-url="<%= api_v1_quickbooks_connection_profit_and_loss_report_path(@connection) %>"
+      data-balance-sheet-url="<%= api_v1_quickbooks_connection_balance_sheet_report_path(@connection) %>"
+      data-cash-flow-url="<%= api_v1_quickbooks_connection_cash_flow_report_path(@connection) %>"
+      data-general-ledger-url="<%= api_v1_quickbooks_connection_general_ledger_report_path(@connection) %>"
+      data-trial-balance-url="<%= api_v1_quickbooks_connection_trial_balance_report_path(@connection) %>">
+  <p>
+    <%= link_to "Company connection", quickbooks_connection_path(@connection) %>
+    ·
+    <%= link_to "Sales and payables dashboard", quickbooks_connection_transactions_path(@connection) %>
+    ·
+    <%= link_to "Workforce, tax, and inventory", quickbooks_connection_operations_path(@connection) %>
+    ·
+    <%= link_to "API documentation", api_docs_path %>
+  </p>
+  <h1>QuickBooks financial records API dashboard</h1>
+  <p>
+    Read QuickBooks-generated financial statements, create one controlled balanced Journal Entry, inspect
+    existing Journal Entries, and review local submission history. All dashboard data is loaded from Rails JSON
+    APIs connected only to the QuickBooks sandbox.
+  </p>
+
+  <div id="api-alert" class="api-alert" role="alert" hidden>
+    <div>
+      <strong id="api-alert-title">API request failed</strong>
+      <p id="api-alert-message"></p>
+    </div>
+    <button type="button" data-dismiss-api-alert aria-label="Dismiss API error">Dismiss</button>
+  </div>
+
+  <p id="api-status" role="status">Loading data through the API…</p>
+
+  <section aria-labelledby="financial-reports-heading">
+    <h2 id="financial-reports-heading">GET CFO financial statements</h2>
+    <p>
+      QuickBooks calculates these read-only reports from the sandbox company’s existing accounting data. Profit
+      &amp; Loss, Cash Flow, General Ledger, and Trial Balance use a period of up to six months; Balance Sheet uses
+      one as-of date. Rails does not store, recalculate, or POST report values.
+    </p>
+
+    <form class="filter-panel" data-financial-report-form>
+      <div class="filter-grid">
+        <p>
+          <label for="financial-report-type">Financial statement</label><br>
+          <select id="financial-report-type" data-financial-report-type>
+            <option value="profit_and_loss">Profit &amp; Loss</option>
+            <option value="balance_sheet">Balance Sheet</option>
+            <option value="cash_flow">Cash Flow Statement</option>
+            <option value="general_ledger">General Ledger</option>
+            <option value="trial_balance">Trial Balance</option>
+          </select>
+        </p>
+        <p data-report-period-field>
+          <label for="financial-report-start-date">Start date</label><br>
+          <input id="financial-report-start-date"
+                 type="date"
+                 value="<%= Date.current.prev_month(6).iso8601 %>"
+                 data-financial-report-start-date
+                 required>
+        </p>
+        <p data-report-period-field>
+          <label for="financial-report-end-date">End date</label><br>
+          <input id="financial-report-end-date"
+                 type="date"
+                 value="<%= Date.current.iso8601 %>"
+                 data-financial-report-end-date
+                 required>
+        </p>
+        <p data-report-as-of-field hidden>
+          <label for="financial-report-as-of-date">As of date</label><br>
+          <input id="financial-report-as-of-date"
+                 type="date"
+                 value="<%= Date.current.iso8601 %>"
+                 data-financial-report-as-of-date>
+        </p>
+        <p data-report-basis-field>
+          <label for="financial-report-basis">Accounting basis</label><br>
+          <select id="financial-report-basis" data-financial-report-basis>
+            <option value="Accrual">Accrual</option>
+            <option value="Cash">Cash</option>
+          </select>
+        </p>
+        <p data-report-cash-flow-basis-note hidden>
+          <strong>Accounting basis</strong><br>
+          Not exposed by the QuickBooks Cash Flow API.
+        </p>
+      </div>
+      <div class="filter-actions">
+        <button type="submit" data-load-financial-report>Load selected statement through API</button>
+        <button type="button" class="secondary-action" data-export-financial-report disabled>
+          Download current statement CSV
+        </button>
+      </div>
+    </form>
+
+    <p id="financial-report-summary">Waiting for the Profit &amp; Loss API…</p>
+    <dl class="report-metadata" data-financial-report-metadata hidden>
+      <div>
+        <dt>Statement</dt>
+        <dd data-report-title>—</dd>
+      </div>
+      <div>
+        <dt>Basis</dt>
+        <dd data-report-basis>—</dd>
+      </div>
+      <div>
+        <dt>QuickBooks period</dt>
+        <dd data-report-period>—</dd>
+      </div>
+      <div>
+        <dt>Currency</dt>
+        <dd data-report-currency>—</dd>
+      </div>
+    </dl>
+    <div class="table-scroll">
+      <table class="financial-report-table">
+        <thead>
+          <tr id="financial-report-columns">
+            <th scope="col">Loading through GET API…</th>
+          </tr>
+        </thead>
+        <tbody id="financial-report-rows">
+          <tr><td>Waiting for QuickBooks report data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="post-record-heading">
+    <h2 id="post-record-heading">POST a financial record</h2>
+    <p>
+      This sends one real, balanced Journal Entry to the QuickBooks sandbox through the JSON API. Debit and
+      credit use the same positive amount. Accounts Receivable and Accounts Payable are excluded because they
+      need additional customer/vendor data.
+    </p>
+
+    <%= form_with url: api_v1_quickbooks_connection_journal_entries_path(@connection),
+                  scope: :journal_entry,
+                  method: :post,
+                  data: { journal_entry_form: true } do |form| %>
+      <div class="form-grid">
+        <p>
+          <%= form.label :txn_date, "Date" %><br>
+          <%= form.date_field :txn_date, value: Date.current.iso8601, required: true %>
+        </p>
+        <p>
+          <%= form.label :amount %><br>
+          <%= form.number_field :amount, min: "0.01", step: "0.01", required: true, placeholder: "100.00" %>
+        </p>
+        <p>
+          <%= form.label :debit_account_id, "Debit account" %><br>
+          <%= form.select :debit_account_id, [ [ "Loading from API…", "" ] ], {}, required: true %>
+        </p>
+        <p>
+          <%= form.label :credit_account_id, "Credit account" %><br>
+          <%= form.select :credit_account_id, [ [ "Loading from API…", "" ] ], {}, required: true %>
+        </p>
+      </div>
+      <p>
+        <%= form.label :memo %><br>
+        <%= form.text_field :memo,
+                            required: true,
+                            maxlength: 500,
+                            placeholder: "Why this journal entry is being posted" %>
+      </p>
+      <%= form.submit "POST journal entry through API", disabled: true %>
+    <% end %>
+  </section>
+
+  <section aria-labelledby="filters-heading">
+    <h2 id="filters-heading">Filter and export read-only data</h2>
+    <p>
+      Entry dates are sent to both read-only GET APIs so older matching pages can be loaded. Memo and audit status
+      are applied in this browser to the pages loaded so far. CSV downloads contain only visible loaded data,
+      with each Journal Entry line exported as its own CSV row.
+    </p>
+    <form class="filter-panel" data-cfo-filter-form>
+      <div class="filter-grid">
+        <p>
+          <label for="filter-date-from">Entry date from</label><br>
+          <input id="filter-date-from" type="date" data-filter-date-from>
+        </p>
+        <p>
+          <label for="filter-date-to">Entry date to</label><br>
+          <input id="filter-date-to" type="date" data-filter-date-to>
+        </p>
+        <p>
+          <label for="filter-memo">Memo contains</label><br>
+          <input id="filter-memo" type="search" maxlength="500" placeholder="Search memo" data-filter-memo>
+        </p>
+        <p>
+          <label for="filter-audit-status">Audit status</label><br>
+          <select id="filter-audit-status" data-filter-audit-status>
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="succeeded">Succeeded</option>
+            <option value="rejected">Rejected</option>
+            <option value="uncertain">Uncertain</option>
+          </select>
+        </p>
+      </div>
+      <div class="filter-actions">
+        <button type="submit">Apply filters</button>
+        <button type="reset" class="secondary-action" data-clear-filters>Clear filters</button>
+        <button type="button" class="secondary-action" data-export-journal-entries disabled>
+          Download visible Journal Entries CSV
+        </button>
+        <button type="button" class="secondary-action" data-export-audit-history disabled>
+          Download visible audit CSV
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section aria-labelledby="audit-heading">
+    <h2 id="audit-heading">GET submission audit history</h2>
+    <p>
+      This read-only API shows paginated local Journal Entry submission operations. It reads PostgreSQL only and
+      does not call or modify QuickBooks.
+    </p>
+    <p id="audit-summary">Waiting for the audit history API…</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Submitted</th>
+            <th scope="col">Status</th>
+            <th scope="col">Entry date</th>
+            <th scope="col">Memo</th>
+            <th scope="col">Amount</th>
+            <th scope="col">Accounts</th>
+            <th scope="col">QuickBooks ID</th>
+          </tr>
+        </thead>
+        <tbody id="audit-operation-rows">
+          <tr><td colspan="7">Loading through GET API…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="pagination-actions">
+      <button type="button" class="secondary-action" data-load-more-audit hidden>
+        Load more audit operations
+      </button>
+    </p>
+  </section>
+
+  <section aria-labelledby="records-heading">
+    <h2 id="records-heading">GET financial records</h2>
+    <p id="records-summary">Waiting for the Journal Entries API…</p>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Date</th>
+            <th scope="col">QuickBooks ID</th>
+            <th scope="col">Memo</th>
+            <th scope="col">Lines</th>
+          </tr>
+        </thead>
+        <tbody id="journal-entry-rows">
+          <tr><td colspan="4">Loading through GET API…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="pagination-actions">
+      <button type="button" class="secondary-action" data-load-more-journal-entries hidden>
+        Load more Journal Entries
+      </button>
+    </p>
+  </section>
+
+</main>
