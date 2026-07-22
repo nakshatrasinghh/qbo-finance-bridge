@@ -160,12 +160,21 @@ used. Neither operation is represented as a payroll run, paycheck, deduction, be
 
 - [TaxCode entity reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/taxcode)
 - [TaxRate entity reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/taxrate)
+- [TaxAgency entity reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/taxagency)
 - [TaxService entity reference](https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/taxservice)
+- [Automated sales tax for US locales](https://developer.intuit.com/app/developer/qbo/docs/workflows/calculate-sales-tax/automated-sales-tax-for-us-locales)
+- [Automated sales tax for non-US locales](https://developer.intuit.com/app/developer/qbo/docs/workflows/calculate-sales-tax/automated-sales-tax-for-non-us-locales)
 
 TaxCode and TaxRate are query/read resources. New codes and rates are created through TaxService. Phase 13 reads
 codes, rates, and agencies but limits POST to one new TaxCode associated with one existing active rate for Sales or
 Purchase. It does not create a rate/agency, calculate tax on a transaction, submit a return, or make a TaxPayment.
 US companies expose system-managed agencies/rates; vendor rejection remains a visible sanitized API error.
+
+Phase 21 distinguishes the locale models before POST. Intuit's US workflow describes sales TaxCodes and automated
+sales tax, while the non-US workflow explicitly supports rates in `SalesTaxRateList`, `PurchaseTaxRateList`, or
+both. Rails therefore permits the requested applicability only when the selected rate's current TaxAgency reports
+the matching `TaxTrackedOnSales` or `TaxTrackedOnPurchases` capability. It continues to compare the returned list
+instead of accepting a vendor-normalized mismatch.
 
 ## Inventory items
 
@@ -237,6 +246,11 @@ General Ledger rows for transaction `151`, `Inventory Starting Value`, even thou
 zero. Both amounts are `.00`, split between Opening Balance Equity and Inventory Asset. P&L, Balance Sheet, Cash
 Flow, and Trial Balance remained byte-for-byte stable; General Ledger increased from 460 to 462 rows with no
 balance change.
+
+On 2026-07-22, a user-initiated Purchase TaxCode request selected US sandbox TaxRate `3`. QuickBooks returned
+TaxCode ID `6`, but the independent collection GET showed `Test TAX 2` with rate `3` in `SalesTaxRateList` and an
+empty `PurchaseTaxRateList`. Rails correctly kept operation `36` uncertain because the stored native record did
+not match the submitted applicability. Phase 21 sent no replacement POST and did not rewrite this audit fact.
 
 On 2026-07-15, the connected sandbox returned 90 active Accounts; after excluding A/R, A/P, and the discarded
 demo Account, 87 are available to the form.

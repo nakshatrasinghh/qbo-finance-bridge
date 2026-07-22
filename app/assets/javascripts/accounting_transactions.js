@@ -23,6 +23,12 @@ document.addEventListener("DOMContentLoaded", () => {
     billPayment: document.querySelector("[data-bill-payment-create-form]")
   }
   const keys = new WeakMap()
+  const transientGetErrorCodes = new Set(["quickbooks_timeout", "quickbooks_unavailable"])
+  const renewableIdempotencyErrorCodes = new Set([
+    "idempotency_key_invalid",
+    "idempotency_key_reused",
+    "idempotency_request_rejected"
+  ])
   const state = {
     customers: [],
     vendors: [],
@@ -55,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const resetIdempotencyKey = (form) => keys.set(form, window.crypto.randomUUID())
 
-  const apiRequest = async (url, options = {}) => {
+  const apiRequest = async (url, options = {}, retryCount = 0) => {
     const headers = { Accept: "application/json", ...options.headers }
     const token = csrfToken()
     if (token && options.method && options.method !== "GET") headers["X-CSRF-Token"] = token
@@ -65,9 +71,16 @@ document.addEventListener("DOMContentLoaded", () => {
     })
     const data = await response.json().catch(() => ({}))
     if (!response.ok) {
+      const code = data.error?.code || "api_error"
+      const method = (options.method || "GET").toUpperCase()
+      if (method === "GET" && retryCount === 0 && transientGetErrorCodes.has(code)) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500))
+        return apiRequest(url, options, retryCount + 1)
+      }
+
       throw new ApiError(
         data.error?.message || `API request failed with HTTP ${response.status}.`,
-        data.error?.code || "api_error",
+        code,
         response.status
       )
     }
@@ -371,28 +384,47 @@ document.addEventListener("DOMContentLoaded", () => {
     clearAlert()
     enableSubmit(form, false)
     setStatus(`Submitting ${successLabel} through the Rails POST API…`)
+    let data
+    let postError
     try {
-      const data = await apiRequest(form.action, {
+      data = await apiRequest(form.action, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey(form) },
         body: JSON.stringify(formPayload(form, scope, fields))
       })
       resetIdempotencyKey(form)
       form.reset()
-      await refresh()
-      setStatus(
-        `${successLabel} ${data[responseKey].id} was created, read back, and recorded as local operation ` +
-        `${data.idempotency.operation_id}.`
-      )
     } catch (error) {
-      if (error.apiCode === localErrorCode || error.apiCode === "idempotency_key_invalid") {
+      postError = error
+      if (error.apiCode === localErrorCode || renewableIdempotencyErrorCodes.has(error.apiCode)) {
         resetIdempotencyKey(form)
       }
-      showAlert(`${successLabel} POST failed`, error)
-      setStatus(`${successLabel} was not confirmed. Review the alert before retrying.`)
-    } finally {
-      enableSubmit(form, ready())
     }
+
+    const refreshResult = await Promise.allSettled([refresh()]).then(([result]) => result)
+    if (postError) {
+      const refreshMessage = refreshResult.status === "fulfilled" ?
+        "The related GET APIs were refreshed." :
+        `The related GET refresh also failed: ${refreshResult.reason.message}`
+      showAlert(
+        `${successLabel} POST failed`,
+        new ApiError(`${postError.message} ${refreshMessage}`, postError.apiCode, postError.statusCode)
+      )
+      setStatus(`${successLabel} was not confirmed; its related GET APIs were attempted.`)
+    } else if (refreshResult.status === "rejected") {
+      showAlert(
+        `${successLabel} was created, but refresh failed`,
+        new ApiError(refreshResult.reason.message, refreshResult.reason.apiCode, refreshResult.reason.statusCode)
+      )
+      setStatus(`${successLabel} ${data[responseKey].id} is confirmed; its related GET refresh failed.`)
+    } else {
+      setStatus(
+        `${successLabel} ${data[responseKey].id} was created, read back, and recorded as local operation ` +
+        `${data.idempotency.operation_id}. Its related GET APIs were refreshed.`
+      )
+    }
+
+    enableSubmit(form, ready())
   }
 
   document.querySelector("[data-dismiss-transactions-alert]").addEventListener("click", clearAlert)

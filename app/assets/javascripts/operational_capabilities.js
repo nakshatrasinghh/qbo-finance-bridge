@@ -18,6 +18,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const inventoryItemForm = document.querySelector("[data-inventory-item-create-form]")
   const forms = [employeeForm, timeActivityForm, taxCodeForm, inventoryItemForm]
   const keys = new WeakMap()
+  const transientGetErrorCodes = new Set(["quickbooks_timeout", "quickbooks_unavailable"])
+  const renewableIdempotencyErrorCodes = new Set([
+    "idempotency_key_invalid",
+    "idempotency_key_reused",
+    "idempotency_request_rejected"
+  ])
   const state = {
     employees: [],
     timeActivities: [],
@@ -44,7 +50,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   const resetIdempotencyKey = (form) => keys.set(form, nextIdempotencyKey())
 
-  const apiRequest = async (url, options = {}) => {
+  const apiRequest = async (url, options = {}, retryCount = 0) => {
     const headers = { Accept: "application/json", ...options.headers }
     const token = csrfToken()
     if (token && options.method && options.method !== "GET") headers["X-CSRF-Token"] = token
@@ -54,9 +60,16 @@ document.addEventListener("DOMContentLoaded", () => {
     })
     const data = await response.json().catch(() => ({}))
     if (!response.ok) {
+      const code = data.error?.code || "api_error"
+      const method = (options.method || "GET").toUpperCase()
+      if (method === "GET" && retryCount === 0 && transientGetErrorCodes.has(code)) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500))
+        return apiRequest(url, options, retryCount + 1)
+      }
+
       throw new ApiError(
         data.error?.message || `API request failed with HTTP ${response.status}.`,
-        data.error?.code || "api_error",
+        code,
         response.status
       )
     }
@@ -108,8 +121,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const populateSelect = (select, records, label, emptyLabel) => {
+    const selected = select.value
     select.replaceChildren(new Option(emptyLabel, ""))
     records.forEach((record) => select.add(new Option(label(record), record.id)))
+    if (records.some((record) => String(record.id) === selected)) select.value = selected
   }
 
   const submitButton = (form) => form.querySelector("input[type='submit'], button[type='submit']")
@@ -172,10 +187,39 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelector("#tax-codes-summary").textContent =
       `${state.taxCodes.length} TaxCodes, ${state.taxRates.length} TaxRates, and ${state.taxAgencies.length} TaxAgencies loaded.`
 
-    const activeRates = state.taxRates.filter((rate) => rate.active)
+    const activeRates = eligibleTaxRates()
     const select = taxCodeForm.elements.namedItem("tax_code[tax_rate_id]")
     populateSelect(select, activeRates, (rate) => `${rate.name} — ${rate.rate_value}%`, "Select an existing TaxRate")
+    syncTaxCodeApplicability()
     enableSubmit(taxCodeForm, activeRates.length > 0)
+  }
+
+  const taxRateAgency = (rate) => state.taxAgencies.find((agency) => agency.id === rate?.agency_id)
+  const taxRateUses = (rate) => {
+    const agency = taxRateAgency(rate)
+    const uses = []
+    if (agency?.tracks_sales) uses.push("Sales")
+    if (agency?.tracks_purchases) uses.push("Purchase")
+    return uses
+  }
+  const eligibleTaxRates = () => state.taxRates.filter((rate) => rate.active && taxRateUses(rate).length > 0)
+  const syncTaxCodeApplicability = () => {
+    const rateId = taxCodeForm.elements.namedItem("tax_code[tax_rate_id]").value
+    const select = taxCodeForm.elements.namedItem("tax_code[applicable_on]")
+    const selected = select.value
+    const rate = state.taxRates.find((record) => record.id === rateId)
+    const uses = taxRateUses(rate)
+
+    select.replaceChildren()
+    if (uses.length === 0) {
+      select.add(new Option("Select a compatible TaxRate first", ""))
+      select.disabled = true
+      return
+    }
+
+    uses.forEach((use) => select.add(new Option(use === "Sales" ? "Sales" : "Purchases", use)))
+    select.value = uses.includes(selected) ? selected : uses[0]
+    select.disabled = false
   }
 
   const renderInventoryCatalog = () => {
@@ -248,41 +292,61 @@ document.addEventListener("DOMContentLoaded", () => {
     clearAlert()
     enableSubmit(form, false)
     setStatus(`Submitting ${successLabel} through the Rails POST API…`)
+    let data
+    let postError
     try {
-      const data = await apiRequest(form.action, {
+      data = await apiRequest(form.action, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey(form) },
         body: JSON.stringify(formPayload(form, scope, fields))
       })
       resetIdempotencyKey(form)
       form.reset()
-      await refresh()
-      setStatus(
-        `${successLabel} ${data[scope].id} was created, read back, and recorded as local operation ` +
-          `${data.idempotency.operation_id}.`
-      )
     } catch (error) {
-      if (error.apiCode === localErrorCode || error.apiCode === "idempotency_key_invalid") {
+      postError = error
+      if (error.apiCode === localErrorCode || renewableIdempotencyErrorCodes.has(error.apiCode)) {
         resetIdempotencyKey(form)
       }
-      showAlert(`${successLabel} POST failed`, error)
-      setStatus(`${successLabel} was not confirmed. Review the alert before retrying.`)
-    } finally {
-      if (scope === "employee") enableSubmit(form, true)
-      if (scope === "time_activity") enableSubmit(form, state.employees.length > 0)
-      if (scope === "tax_code") enableSubmit(form, state.taxRates.some((rate) => rate.active))
-      if (scope === "inventory_item") {
-        enableSubmit(
-          form,
-          state.accountChoices.income.length > 0 &&
-            state.accountChoices.expense.length > 0 &&
-            state.accountChoices.asset.length > 0
-        )
-      }
+    }
+
+    const refreshResult = await Promise.allSettled([refresh()]).then(([result]) => result)
+    if (postError) {
+      const refreshMessage = refreshResult.status === "fulfilled" ?
+        "The related GET API was refreshed." :
+        `The related GET refresh also failed: ${refreshResult.reason.message}`
+      showAlert(
+        `${successLabel} POST failed`,
+        new ApiError(`${postError.message} ${refreshMessage}`, postError.apiCode, postError.statusCode)
+      )
+      setStatus(`${successLabel} was not confirmed; its related GET API was attempted.`)
+    } else if (refreshResult.status === "rejected") {
+      showAlert(
+        `${successLabel} was created, but refresh failed`,
+        new ApiError(refreshResult.reason.message, refreshResult.reason.apiCode, refreshResult.reason.statusCode)
+      )
+      setStatus(`${successLabel} ${data[scope].id} is confirmed; its related GET refresh failed.`)
+    } else {
+      setStatus(
+        `${successLabel} ${data[scope].id} was created, read back, and recorded as local operation ` +
+          `${data.idempotency.operation_id}. Its related GET API was refreshed.`
+      )
+    }
+
+    if (scope === "employee") enableSubmit(form, true)
+    if (scope === "time_activity") enableSubmit(form, state.employees.length > 0)
+    if (scope === "tax_code") enableSubmit(form, eligibleTaxRates().length > 0)
+    if (scope === "inventory_item") {
+      enableSubmit(
+        form,
+        state.accountChoices.income.length > 0 &&
+          state.accountChoices.expense.length > 0 &&
+          state.accountChoices.asset.length > 0
+      )
     }
   }
 
   document.querySelector("[data-dismiss-operations-alert]").addEventListener("click", clearAlert)
+  taxCodeForm.elements.namedItem("tax_code[tax_rate_id]").addEventListener("change", syncTaxCodeApplicability)
 
   employeeForm.addEventListener("submit", (event) => {
     event.preventDefault()

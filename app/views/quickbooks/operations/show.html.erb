@@ -160,7 +160,11 @@
         </p>
         <p>
           <%= form.label :applicable_on, "Applicable on" %><br>
-          <%= form.select :applicable_on, [ [ "Sales", "Sales" ], [ "Purchases", "Purchase" ] ] %>
+          <%= form.select :applicable_on,
+                          [ [ "Sales", "Sales" ], [ "Purchases", "Purchase" ] ],
+                          {},
+                          required: true %><br>
+          <small>Available uses are limited to those advertised by the selected QuickBooks TaxRate agency.</small>
         </p>
       </div>
       <%= form.submit "POST TaxCode to QuickBooks sandbox", disabled: true %>

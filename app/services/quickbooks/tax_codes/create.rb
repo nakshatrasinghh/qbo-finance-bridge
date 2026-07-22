@@ -65,6 +65,14 @@ module Quickbooks
 
         rate = catalog.rates.find { |record| record.id == tax_rate_id }
         raise_input!("The selected TaxRate is not active in QuickBooks.") unless rate&.active
+
+        agency = catalog.agencies.find { |record| record.id == rate.agency_id }
+        supported = applicable_on == "Sales" ? agency&.tracks_sales : agency&.tracks_purchases
+        unless supported
+          raise_input!(
+            "The selected TaxRate is not available for #{applicable_on.downcase} tax in this QuickBooks company."
+          )
+        end
       end
 
       def payload

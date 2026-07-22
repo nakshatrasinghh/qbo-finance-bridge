@@ -307,12 +307,16 @@ sequenceDiagram
     Q-->>A: Safe typed failure
     A-->>B: 4xx or 5xx JSON error envelope
   end
-  B->>B: Show dismissible alert and failure status
-  B->>B: Mark affected controls/table unavailable
+  B->>A: Related GET reconciliation request
+  A->>Q: Read-only QuickBooks request when applicable
+  Q-->>A: Current native data or safe failure
+  A-->>B: GET result
+  B->>B: Show separate POST and GET outcomes
 ```
 
 Initial Profit & Loss, Accounts, Journal Entries, and local audit-history requests settle independently, so every
 failed source can be named while successful sections still render. A report failure marks only the statement
 table unavailable. An Accounts failure keeps POST disabled. An audit-history failure marks only its table
-unavailable. A POST failure preserves the user's form values and explicitly warns the user to check QuickBooks
-before retrying because the external transaction status may be uncertain.
+unavailable. Safe transient GET failures are retried once after 500 ms. A POST failure preserves the user's form
+values, refreshes the related GET projection, and explicitly warns the user to check QuickBooks before retrying
+when the external transaction status may be uncertain. No POST is automatically retried.

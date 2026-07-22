@@ -695,3 +695,38 @@ Installed syntax_tree version: 6.3.0
 - Standard Ruby was not adopted because it would replace the existing Rails Omakase lint policy. No ERB or
   JavaScript formatter gem was added because the authorized phase explicitly selected an idiomatic Ruby
   formatter and one ownership boundary.
+
+## Phase 21 — Dashboard POST recovery and TaxCode applicability
+
+Date reviewed: 2026-07-22
+Installed Ruby version: 3.4.6
+Installed Rails version: 8.1.3
+
+### Current Intuit contract review
+
+- Sources: the official TaxCode, TaxRate, TaxAgency, and TaxService entity references plus Intuit's current
+  automated-sales-tax workflows for US and non-US locales, all linked in `docs/references.md`.
+- The non-US workflow explicitly models sales and purchase tax through `SalesTaxRateList` and
+  `PurchaseTaxRateList`. The US workflow documents the sales-tax/AST model and user-defined sales TaxCodes.
+- The connected US sandbox's two TaxAgencies currently report sales tracking and no purchase tracking. A
+  user-initiated TaxService request nevertheless accepted `TaxApplicableOn: Purchase`, returned ID `6`, and then
+  exposed that rate in the created TaxCode's sales list. The prior readback rejection was therefore correct; the
+  missing guard was proving that the selected rate's agency supports the requested use before POST.
+
+### Rails and browser decision
+
+- Keep the existing explicit TaxCode creator. Extend its current catalog validation to require the chosen active
+  rate's current agency and matching sales/purchase capability. Do not weaken readback matching or infer that a
+  vendor-normalized record equals the submitted request.
+- Derive the dashboard applicability options from the same GET catalog so the user cannot select a use the agency
+  does not advertise. Server validation remains authoritative against stale or fabricated input.
+- After every dashboard POST response, call only its already-existing related GET projection or projections.
+  Present POST and refresh outcomes separately and never retry POST automatically.
+- Retry a Rails GET once after 500 ms only for the existing safe `quickbooks_timeout` and
+  `quickbooks_unavailable` error codes. This is a browser recovery attempt, not a new transport abstraction or a
+  QuickBooks write retry.
+- Rotate the browser UUID after invalid keys, locally rejected operations, entity-specific validation, and
+  same-key/different-input conflicts. Preserve pending and uncertain UUIDs so the interface cannot bypass an
+  unresolved write outcome.
+- No new Rails architectural pattern, route, database table, migration, gem, or generic service is introduced.
+  Automated tests remain disabled.

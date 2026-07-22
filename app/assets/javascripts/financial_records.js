@@ -59,6 +59,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const currency = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" })
   const nextIdempotencyKey = () => window.crypto.randomUUID()
   const readPageSize = 25
+  const transientGetErrorCodes = new Set(["quickbooks_timeout", "quickbooks_unavailable"])
+  const renewableIdempotencyErrorCodes = new Set([
+    "idempotency_key_invalid",
+    "idempotency_key_reused",
+    "idempotency_request_rejected"
+  ])
 
   let idempotencyKey = nextIdempotencyKey()
   let journalEntries = []
@@ -91,7 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   dismissAlertButton.addEventListener("click", clearApiAlert)
 
-  const apiRequest = async (url, options = {}) => {
+  const apiRequest = async (url, options = {}, retryCount = 0) => {
     const headers = { Accept: "application/json", ...options.headers }
     if (csrfToken) headers["X-CSRF-Token"] = csrfToken
 
@@ -101,8 +107,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const data = await response.json().catch(() => ({}))
     if (!response.ok) {
+      const code = data.error?.code || "api_error"
+      const method = (options.method || "GET").toUpperCase()
+      if (method === "GET" && retryCount === 0 && transientGetErrorCodes.has(code)) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500))
+        return apiRequest(url, options, retryCount + 1)
+      }
+
       const error = new Error(data.error?.message || `API request failed with HTTP ${response.status}.`)
-      error.apiCode = data.error?.code
+      error.apiCode = code
       error.httpStatus = response.status
       throw error
     }
@@ -786,8 +799,10 @@ document.addEventListener("DOMContentLoaded", () => {
       credit_account_id: formData.get("journal_entry[credit_account_id]")
     }
 
+    let data
+    let postError
     try {
-      const data = await apiRequest(journalEntriesUrl, {
+      data = await apiRequest(journalEntriesUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
         body: JSON.stringify({ journal_entry: journalEntry })
@@ -795,44 +810,52 @@ document.addEventListener("DOMContentLoaded", () => {
       idempotencyKey = nextIdempotencyKey()
       form.querySelector("[name='journal_entry[memo]']").value = ""
       form.querySelector("[name='journal_entry[amount]']").value = ""
-
-      const action = data.idempotency.replayed ? "Reused" : "Created"
-      const [entriesRefresh, auditRefresh] = await Promise.allSettled([
-        loadJournalEntries(),
-        loadAuditHistory()
-      ])
-      const refreshFailures = [entriesRefresh, auditRefresh]
-        .filter((result) => result.status === "rejected")
-        .map((result) => result.reason.message)
-
-      if (refreshFailures.length > 0) {
-        showApiAlert(
-          `${action} Journal Entry, but refresh failed`,
-          `QuickBooks Journal Entry ${data.journal_entry.id} is confirmed. ${refreshFailures.join(" ")}`
-        )
-        setStatus(`${action} QuickBooks Journal Entry ${data.journal_entry.id}; dashboard refresh failed.`, true)
-        return
-      }
-
-      const replayMessage = data.idempotency.replayed ? " No duplicate transaction was created." : ""
-      setStatus(
-        `${action} QuickBooks Journal Entry ${data.journal_entry.id} through the API and read it back.${replayMessage}`
-      )
     } catch (error) {
-      if (error.apiCode === "quickbooks_journal_entry_input_invalid") idempotencyKey = nextIdempotencyKey()
+      postError = error
+      if (error.apiCode === "quickbooks_journal_entry_input_invalid" ||
+        renewableIdempotencyErrorCodes.has(error.apiCode)) {
+        idempotencyKey = nextIdempotencyKey()
+      }
+    }
 
-      const outcomeGuidance = error.apiCode?.startsWith("idempotency_") ||
-        error.apiCode === "quickbooks_journal_entry_input_invalid" ?
+    const [entriesRefresh, auditRefresh] = await Promise.allSettled([
+      loadJournalEntries(),
+      loadAuditHistory()
+    ])
+    const refreshFailures = [entriesRefresh, auditRefresh]
+      .filter((result) => result.status === "rejected")
+      .map((result) => result.reason.message)
+
+    if (postError) {
+      const outcomeGuidance = postError.apiCode?.startsWith("idempotency_") ||
+        postError.apiCode === "quickbooks_journal_entry_input_invalid" ?
         "" :
         " Check QuickBooks before retrying because the transaction status may be uncertain."
+      const refreshGuidance = refreshFailures.length === 0 ?
+        " Journal Entries and audit history were refreshed." :
+        ` Related GET refresh failed: ${refreshFailures.join(" ")}`
       showApiAlert(
         "Journal Entry request failed",
-        `${error.message}${outcomeGuidance}`
+        `${postError.message}${outcomeGuidance}${refreshGuidance}`
       )
-      setStatus("The Journal Entry API request failed.", true)
-    } finally {
-      submitButton.disabled = false
+      setStatus("The Journal Entry POST failed; its related GET APIs were attempted.", true)
+    } else if (refreshFailures.length > 0) {
+      const action = data.idempotency.replayed ? "Reused" : "Created"
+      showApiAlert(
+        `${action} Journal Entry, but refresh failed`,
+        `QuickBooks Journal Entry ${data.journal_entry.id} is confirmed. ${refreshFailures.join(" ")}`
+      )
+      setStatus(`${action} QuickBooks Journal Entry ${data.journal_entry.id}; dashboard refresh failed.`, true)
+    } else {
+      const action = data.idempotency.replayed ? "Reused" : "Created"
+      const replayMessage = data.idempotency.replayed ? " No duplicate transaction was created." : ""
+      setStatus(
+        `${action} QuickBooks Journal Entry ${data.journal_entry.id} through the API and read it back. ` +
+        `Journal Entries and audit history were refreshed.${replayMessage}`
+      )
     }
+
+    submitButton.disabled = false
   })
 
   syncFinancialReportDateFields()

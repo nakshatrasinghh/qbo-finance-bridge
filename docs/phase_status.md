@@ -1,27 +1,30 @@
-# Phase 20 status — initial GitHub handoff complete
+# Phase 22 status — Phase 21 GitHub handoff complete
 
-Phase 20 is complete. The reviewed local QuickBooks sandbox MVP has one authorized lowercase initial commit on
-`main`, the canonical GitHub repository is configured as `origin`, and local `main` tracks `origin/main`. No
-later phase has started or is implied.
+Phase 22 is complete. The validated Phase 21 dashboard recovery and TaxCode applicability changes are committed
+on `main` with the authorized lowercase message and pushed normally to the canonical GitHub repository. No later
+phase has started or is implied.
 
 | Item | Final status |
 |---|---|
-| Product boundary | Local QuickBooks sandbox MVP; production work remains out of scope |
+| Product boundary | Local QuickBooks sandbox only; production remains out of scope |
 | Canonical repository | `https://github.com/nakshatrasinghh/qbo-finance-bridge.git` |
-| Remote preflight | Target returned no refs before push; no remote history was overwritten |
-| Branch | Local `main` tracking `origin/main` |
-| Initial commit message | `build: initialize qbo finance bridge` |
-| Candidate review | Complete initial file list reviewed before staging |
-| Credential boundary | Encrypted credentials committed; `config/master.key`, `.env*`, logs, temp, storage, and PID files ignored |
-| Formatter/lint | Syntax Tree check passed; RuboCop inspected 135 files with no offenses |
-| Rails/database | Zeitwerk passed; all six migrations remain `up` |
-| Security/dependencies | Bundler Audit and Importmap Audit passed; Brakeman reported 0 errors and 0 warnings |
-| Staged-content integrity | No whitespace error or raw secret/private-key pattern detected |
-| Application/QuickBooks | No application behavior or sandbox data changed; no QuickBooks request sent |
+| Branch | `main`, tracking `origin/main` |
+| Remote preflight | Local and remote both started Phase 22 at `83e9cde`; no upstream history required merging |
+| Commit message | `fix: improve dashboard api recovery` |
+| Included application change | Related GET refresh after every dashboard POST outcome; POST never auto-retried |
+| Included transient recovery | One browser retry for `quickbooks_timeout` or `quickbooks_unavailable` GET failures |
+| Included idempotency change | Definitive invalid/rejected/reused-input states renew browser keys; uncertain keys remain held |
+| Included TaxCode change | TaxRate agency capability is required and presented before Sales/Purchase submission |
+| Existing sandbox evidence | TaxCodes `5` and `6`, plus uncertain operations `33` and `36`, remain unchanged |
+| Phase 21 runtime acceptance | 4/4 capability GET sources loaded; incompatible Purchase validation stopped before POST |
+| Formatter/lint/load | Syntax Tree, JavaScript syntax, RuboCop, and Rails Zeitwerk passed |
+| Database | All six migrations remain `up`; no migration was added |
+| Security/dependencies | Brakeman, Bundler Audit, and Importmap Audit passed |
+| OpenAPI | v1.5.2 parsed as OpenAPI 3.0.3 with 19 paths; routes/shapes unchanged |
+| Candidate integrity | Staged diff and whitespace review passed; no raw secret/private-key pattern detected |
+| Additional QuickBooks requests | None in Phase 22 |
 | Automated tests | Intentionally not created, modified, or run |
-| Push policy | Normal initial push only; no force push used |
+| Push policy | Normal `main` push only; no force push |
 
-Primary handoff: `docs/operator_handoff.md`. Detailed Phase 20 evidence:
-`docs/phases/20_initial_git_handoff.md`.
-
-The repository is ready for normal review and collaboration. Future changes require a new explicit phase.
+Implementation and runtime evidence: `docs/phases/21_dashboard_post_recovery.md`. Git handoff evidence:
+`docs/phases/22_phase21_git_handoff.md`. Operator guidance: `docs/operator_handoff.md`.

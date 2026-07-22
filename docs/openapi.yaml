@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: QuickBooks CFO Bridge API
-  version: 1.5.1
+  version: 1.5.2
   description: |
     JSON endpoints used by the local QuickBooks sandbox dashboard. Rails exposes twenty-nine same-origin CFO
     JSON operations: five reports, Account and Journal Entry reads, local Journal Entry audit history, and
@@ -555,9 +555,11 @@ paths:
       operationId: createTaxCode
       summary: Create one TaxCode from an existing TaxRate
       description: |
-        Creates a unique TaxCode for Sales or Purchase using one existing active TaxRate through TaxService,
-        then queries it back. It does not create a rate/agency, calculate transaction tax, file a return, or make
-        a tax payment. The audited/idempotent sandbox write is not executable from Swagger UI.
+        Creates a unique TaxCode for Sales or Purchase using one existing active TaxRate through TaxService. The
+        selected rate's current TaxAgency must advertise the matching sales or purchase tracking capability.
+        Rails then queries the TaxCode back and verifies the returned rate list. It does not create a rate/agency,
+        calculate transaction tax, file a return, or make a tax payment. The audited/idempotent sandbox write is
+        not executable from Swagger UI.
       tags: [Tax Configuration]
       parameters:
         - $ref: '#/components/parameters/ConnectionId'
@@ -1547,8 +1549,10 @@ components:
           type: string
         tracks_sales:
           type: boolean
+          description: Whether this TaxAgency advertises tax tracking on sales.
         tracks_purchases:
           type: boolean
+          description: Whether this TaxAgency advertises tax tracking on purchases.
     TaxCatalogResponse:
       type: object
       additionalProperties: false
@@ -1591,9 +1595,11 @@ components:
               maxLength: 100
             tax_rate_id:
               type: string
+              description: ID of an active TaxRate whose TaxAgency supports the requested applicability.
             applicable_on:
               type: string
               enum: [Sales, Purchase]
+              description: Must match the selected TaxRate agency's advertised tracking capability.
     InventoryItem:
       type: object
       additionalProperties: false

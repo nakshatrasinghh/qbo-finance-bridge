@@ -100,9 +100,15 @@ The dashboard does not use local Account mappings. The old `account_mappings` ta
 
 ## Request boundaries
 
-GET requests may refresh an expired token and retry once after a 401. POST refreshes before sending when the
-local token is expired, but it does not automatically replay after a 401 because QuickBooks may already have
-committed the entity.
+The QuickBooks client may refresh an expired token and retry one GET after a 401. Separately, each dashboard may
+retry its Rails GET once after a 500 ms delay when the safe response code is `quickbooks_timeout` or
+`quickbooks_unavailable`. POST refreshes before sending when the local token is expired, but neither Rails nor the
+browser automatically replays a POST after a failure because QuickBooks may already have committed the entity.
+
+Every dashboard POST outcome triggers the related Rails GET projection or projections. A successful POST and its
+refresh are presented as separate facts. An errored POST also refreshes current native data without changing its
+audit status. Browser UUIDs rotate only for definitive invalid/rejected/reused-input states; pending and uncertain
+keys remain held for reconciliation.
 
 Financial reports are transient reads. Profit & Loss, Cash Flow, General Ledger, and Trial Balance accept periods
 no longer than six calendar months; Balance Sheet accepts one as-of date. The report parser preserves values rather than deriving

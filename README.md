@@ -12,7 +12,8 @@ This is one simple Ruby on Rails application for a CFO to:
 - filter Journal Entries and audit operations by transaction date on the server, load additional pages, and
   download the visible loaded records as CSV;
 - GET and POST limited Employee records and employee TimeActivities through Rails APIs;
-- GET TaxCodes, TaxRates, and TaxAgencies and POST a TaxCode using one existing active TaxRate;
+- GET TaxCodes, TaxRates, and TaxAgencies and POST a TaxCode using one existing active, applicability-compatible
+  TaxRate;
 - GET Inventory Items and eligible Accounts and POST one decimal-safe Inventory Item;
 - GET and POST Customers, Vendors, one-line Invoices, one-line Bills, customer Payments applied to open Invoices,
   and check-style BillPayments applied to open Bills.
@@ -204,10 +205,16 @@ new QuickBooks call; conflicting or unresolved reuse returns HTTP 409.
 
 Phase 17 live-validated all four create paths. Employee `400000001`, linked TimeActivity `1073741824`, TaxCode
 `4`, and zero-opening Inventory Item `19` were each created and read back with HTTP 201. Their local operations
-are `25` through `28`; all four same-key replays returned HTTP 200 with the original IDs. Current distinct counts
-are 3 Employees, 6 TimeActivities, 6 TaxCodes, 3 TaxRates, 2 TaxAgencies, and 5 Inventory Items. Intuit returned
-TaxRate `3` twice after the TaxCode create, so Rails now collapses identical duplicate IDs while rejecting
+are `25` through `28`; all four same-key replays returned HTTP 200 with the original IDs. Phase 17's distinct
+counts were 3 Employees, 6 TimeActivities, 6 TaxCodes, 3 TaxRates, 2 TaxAgencies, and 5 Inventory Items. Intuit
+returned TaxRate `3` twice after the TaxCode create, so Rails now collapses identical duplicate IDs while rejecting
 conflicting duplicates.
+
+Phase 21 preserves two later user-initiated TaxCodes as native sandbox data: ID `5` (`Test TAX`) and ID `6`
+(`Test TAX 2`). Their audit operations remain uncertain because the first readback became unavailable and the
+second Purchase request was returned by this US sandbox as a sales-rate code. The current dashboard count is eight
+TaxCodes. Rails now proves that the selected rate's TaxAgency supports the requested Sales/Purchase applicability
+before POST, and the form offers only compatible choices.
 
 ### Customers, vendors, sales, and payables
 
@@ -306,9 +313,10 @@ also returns HTTP 409 instead of risking a second QuickBooks POST. A deliberatel
 must use a new UUID.
 
 Every newly successful POST creates a real posting transaction in the sandbox. A replayed success does not. The
-page shows a confirmation before sending and refreshes the records and local audit tables after the verified
-readback. The application does not automatically retry a Journal Entry POST after an HTTP 401 or uncertain
-transport result; the durable key and audit state make that uncertainty visible without creating another record.
+page shows a confirmation before sending and refreshes the records and local audit tables after every POST
+outcome, including a rejection or uncertain result. These follow-up requests are GET-only reconciliation reads;
+the application never automatically retries a Journal Entry POST after an HTTP 401 or uncertain transport result.
+The durable key and audit state make that uncertainty visible without creating another record.
 
 Phase 6 performed the first explicitly approved controlled POST through this dashboard: $1.00 debited to Office
 Expenses (Account `15`) and credited to Supplies (Account `20`) on 2026-07-15. QuickBooks returned Journal Entry
@@ -320,17 +328,21 @@ The APIs are currently intended for this same-origin development dashboard. Rail
 
 ### API failures
 
-When any dashboard GET fails, the page shows a prominent red error banner containing the API's safe error message.
+When any dashboard GET fails, the browser retries that Rails GET once after 500 ms only for the safe
+`quickbooks_timeout` and `quickbooks_unavailable` codes. It never retries a POST. If the second GET also fails,
+the page shows a prominent red error banner containing the API's safe error message.
 The affected statement table, account selectors, QuickBooks records table, or local audit table also change from
 “Loading” to an explicit unavailable state. If Accounts cannot be loaded, POST remains disabled. A financial
 statement or audit-history failure does not disable posting because those reads are independent.
 
-When POST fails, the same banner preserves the form values and tells the user to check QuickBooks before retrying.
-This wording is deliberate: a response or readback failure does not always prove that QuickBooks rejected the
-transaction. The browser preserves the UUID for uncertain failures. Rails refuses to resend an unresolved key and
-uses explicit `idempotency_*` error codes for key reuse, pending, rejected, and uncertain outcomes. The banner can
-be dismissed; the smaller status line continues to show that a request failed. Swagger displays HTTP failures
-inside the expanded operation as usual.
+After every dashboard POST response, successful or not, the browser calls the related GET API or APIs and reports
+the POST and refresh outcomes separately. The form values remain available after failure. This wording and
+behavior are deliberate: a response or readback failure does not always prove that QuickBooks rejected the
+transaction, while the reconciliation GET may already show the native record. The browser preserves the UUID for
+uncertain/in-progress failures. It renews the UUID after malformed keys, rejected operations, definitive
+same-key/different-payload conflicts, and entity-specific local validation errors. Rails refuses to resend an
+unresolved key. The banner can be dismissed; the smaller status line continues to show the outcome. Swagger
+displays HTTP failures inside the expanded operation as usual.
 
 ## Local validation commands
 

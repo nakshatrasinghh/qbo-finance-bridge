@@ -96,8 +96,10 @@ Swagger intentionally has no **Try it out** control for POST. It documents the w
 
 The operations page issues four independent GETs for Employees, TimeActivities, tax configuration, and Inventory
 Items/account choices. Full payroll is unavailable: Employee and TimeActivity are payroll-adjacent Accounting API
-records only. TaxCode creation uses one existing active TaxRate. Inventory Item creation uses existing eligible
-income, COGS, and inventory-asset Accounts; positive opening quantity and cost can change inventory value.
+records only. TaxCode creation uses one existing active TaxRate. The dashboard limits Sales/Purchase choices to
+the capabilities advertised by that rate's TaxAgency; the server repeats the same check immediately before POST.
+Inventory Item creation uses existing eligible income, COGS, and inventory-asset Accounts; positive opening
+quantity and cost can change inventory value.
 
 All four creates use the same safety sequence as the Journal Entry write: confirmation in the browser, CSRF,
 connection-scoped UUID reservation, entity-specific current-reference validation, Intuit `requestid`, readback,
@@ -107,6 +109,11 @@ Phase 17 validated one controlled record through each path. Employee `400000001`
 TimeActivity `1073741824` are workforce/time records only. TaxCode `4` (`P17TAX721`) uses Sales TaxRate `3`.
 Inventory Item `19` uses Accounts `79`/`80`/`81`, quantity zero, cost `0.01`, and price `0.02`. All four were read
 back, all four same-key replays returned their stored HTTP 200 result, and operations `25`–`28` succeeded.
+
+Two later user-initiated TaxCodes are visible through GET but retain honest uncertain audit states: operation `33`
+for ID `5` (`Test TAX`) lost its immediate readback to a transient availability failure, and operation `36` for
+ID `6` (`Test TAX 2`) observed QuickBooks normalize an incompatible Purchase request into the sales-rate list.
+Do not delete these audit rows or retry either key. Phase 21 prevents the same applicability mismatch before POST.
 
 ### Customers, vendors, sales, and payables
 
@@ -134,14 +141,18 @@ rejected operation `24`. This did not create another Customer or change any fina
 
 ## Failure handling
 
-- A failed dashboard GET shows a red alert and marks only the affected source unavailable.
+- A dashboard GET that returns `quickbooks_timeout` or `quickbooks_unavailable` is retried once by the browser
+  after 500 ms. If it still fails, a red alert marks only the affected source unavailable.
+- Every dashboard POST attempt is followed by its related GET API or APIs, even when POST returns an error. The
+  alert reports the POST and refresh outcomes separately; this follow-up is read-only and never resends POST.
 - A financial-statement failure does not disable the independent Journal Entry write form.
 - An Accounts failure keeps POST disabled.
 - A missing Customer, Vendor, sales Item, expense/AP Account, open source transaction, or bank Account keeps only
   its dependent Phase 14 POST disabled.
-- A POST validation failure preserves the form and may safely use a new key after correction.
+- A POST validation failure preserves the form and receives a new key for a corrected attempt. Malformed,
+  rejected, and same-key/different-payload conflicts also renew the browser key.
 - A transport, authentication, or readback failure may have an uncertain external outcome. Check QuickBooks and
-  the audit table before retrying.
+  the audit table before retrying; the browser deliberately retains an uncertain or in-progress key.
 - A stale access token is refreshed once automatically. If the refresh grant is no longer usable, reconnect the
   sandbox from the connections page.
 - **Disconnect and revoke access** changes authorization state. Do not use it as ordinary troubleshooting.
