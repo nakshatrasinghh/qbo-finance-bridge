@@ -23,4 +23,5 @@
 - Documentation explains both adopted and rejected patterns
 - Packwerk, engines, and microservices are deferred until justified
 
-These are durable project rules. Phase-specific implementation details belong in the corresponding phase document, not here.
+These are durable project rules. Implementation details belong in the architecture, data-flow, and API
+documentation.

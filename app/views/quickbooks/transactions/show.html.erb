@@ -1,6 +1,6 @@
 <% content_for :title, "QuickBooks sales and payables API dashboard" %>
 <% content_for :head do %>
-  <%= javascript_include_tag "accounting_transactions", defer: true, "data-turbo-track": "reload" %>
+  <%= javascript_include_tag "accounting_transactions", defer: true %>
 <% end %>
 
 <main data-accounting-transactions
@@ -37,8 +37,8 @@
 
   <p id="transactions-api-status" role="status">Loading sales and payables data through Rails APIs…</p>
 
-  <aside class="capability-note" aria-labelledby="phase-14-boundary">
-    <h2 id="phase-14-boundary">Controlled Phase 14 boundary</h2>
+  <aside class="capability-note" aria-labelledby="transactions-boundary">
+    <h2 id="transactions-boundary">Supported boundary</h2>
     <p>
       Customer and Vendor creates are non-posting list records. Invoice, Bill, Payment, and BillPayment creates
       are real accounting transactions that change sandbox receivable, payable, income, expense, cash, or

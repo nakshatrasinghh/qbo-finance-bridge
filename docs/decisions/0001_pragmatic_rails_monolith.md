@@ -23,7 +23,7 @@ Build one conventional Rails 8.1 application backed by PostgreSQL. Use Rails' ge
 
 - A developer can trace requests through familiar Rails locations.
 - Database transactions, external calls, mappings, and idempotency can remain in one deployable system while still having explicit boundaries.
-- Generated components such as Solid Queue/Cache/Cable and Kamal remain available but are not adopted for business flows before their phases justify them.
+- Unused generated components and deployment dependencies are removed until a concrete requirement justifies them.
 - Namespace discipline and documentation carry modularity initially; this requires periodic architecture review as the code grows.
 
 ## Evidence
@@ -31,8 +31,9 @@ Build one conventional Rails 8.1 application backed by PostgreSQL. Use Rails' ge
 - Rails Doctrine: convention over configuration, the omakase stack, and integrated systems.
 - Rails 8.1.3 generated application structure and built-in health endpoint.
 - Mastodon's current focused health controller demonstrates that even a large Rails application can keep liveness behavior small and conventional.
-- Full evidence and inspected paths are recorded in `docs/reference_review.md`.
 
 ## Revisit conditions
 
-Reconsider package tooling, engines, background processing, or deployment boundaries only when implemented flows show repeated cross-domain coupling, ownership/deployment needs, job durability requirements, or scale evidence that namespace conventions cannot address. Formal checkpoints occur after Phases 4, 8, 12, 20, and 30.
+Reconsider package tooling, engines, background processing, or deployment boundaries only when implemented flows
+show repeated cross-domain coupling, ownership/deployment needs, job durability requirements, or scale evidence
+that namespace conventions cannot address.

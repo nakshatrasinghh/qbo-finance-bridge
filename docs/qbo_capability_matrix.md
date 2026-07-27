@@ -5,9 +5,9 @@ The current app exposes a controlled local QuickBooks Online sandbox surface.
 | Data | QuickBooks representation | GET | POST | Accounting impact | Status |
 |---|---|---|---|---|---|
 | Company connection | CompanyInfo/OAuth | Yes | OAuth only | None | Live sandbox validated |
-| CFO reports | ProfitAndLoss, BalanceSheet, CashFlow, GeneralLedger, TrialBalance | Five explicit Rails GETs | No report POST | None; QuickBooks calculates from transactions | All five live sandbox validated; General Ledger reconciled 8 Phase 16 posting legs and 2 Phase 17 zero-dollar inventory-start rows |
+| CFO reports | ProfitAndLoss, BalanceSheet, CashFlow, GeneralLedger, TrialBalance | Five explicit Rails GETs | No report POST | None; QuickBooks calculates from transactions | All five live sandbox validated; General Ledger reconciled 8 controlled posting legs and 2 zero-dollar inventory-start rows |
 | Journal Entry account choices | Account | Eligible active Account query | No Account creation | None from reading | 87 choices live validated |
-| Financial records | JournalEntry | Date-filtered and paginated GET | Audited/idempotent balanced create + readback | Selected Accounts are debited/credited | GET and one approved $1 Phase 6 write validated |
+| Financial records | JournalEntry | Date-filtered and paginated GET | Audited/idempotent balanced create + readback | Selected Accounts are debited/credited | GET and one approved $1 write validated |
 | Submission audit history | **Local-only** `quickbooks_sync_operations` | PostgreSQL GET | Rows produced by create APIs | None from reading | Existing Journal Entry audit remains scoped to its operation type |
 | Employee directory | Employee | Active Employee query | Names plus optional email/phone; no payroll/PII fields | Non-posting master data | 3 live; controlled create/readback ID `400000001` validated |
 | Employee time | TimeActivity | Recent employee time query | Active Employee, ISO date, whole hours/minutes, description | Records time; does not calculate payroll or invoice | 6 live; controlled 15-minute ID `1073741824` validated |

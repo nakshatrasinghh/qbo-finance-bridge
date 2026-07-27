@@ -53,19 +53,19 @@ flowchart TB
 - `Api::V1::Quickbooks::JournalEntryOperationsController`: paginated/date-filtered JSON GET for connection-scoped
   local audit operations; it does not call QuickBooks.
 - `Api::V1::Quickbooks::EmployeesController`, `TimeActivitiesController`, `TaxCodesController`, and
-  `InventoryItemsController`: explicit GET/POST HTTP boundaries for the four Phase 13 domains.
+  `InventoryItemsController`: explicit GET/POST HTTP boundaries for workforce, tax, and inventory data.
 - `CustomersController`, `VendorsController`, `InvoicesController`, `BillsController`,
-  `CustomerPaymentsController`, and `BillPaymentsController`: explicit GET/POST boundaries for Phase 14.
+  `CustomerPaymentsController`, and `BillPaymentsController`: explicit GET/POST boundaries for sales and payables.
 - `Quickbooks::JournalEntries::AuditSerializer`: exposes the safe audit projection while excluding idempotency keys, digests, token data, and raw result payloads.
 - `app/assets/javascripts/financial_records.js`: calls the nine financial-record operations, renders one selected financial
   statement plus QuickBooks/local audit data, sends statement dates/basis and transaction-date/page parameters,
   loads Journal Entry/audit pages independently, derives memo/status-filtered arrays from loaded pages, exports
   three safe CSV projections, holds one UUID idempotency key per intended submission, submits JSON with the Rails
   CSRF token, and turns normalized failures into one dismissible alert plus an explicit unavailable state.
-- `app/assets/javascripts/operational_capabilities.js`: calls four Phase 13 GET APIs independently, renders their
+- `app/assets/javascripts/operational_capabilities.js`: calls four operational GET APIs independently, renders their
   tables and constrained selectors, holds one UUID per intended form submission, confirms all four real sandbox
   writes, and exposes safe API failures without putting entity logic in the browser.
-- `app/assets/javascripts/accounting_transactions.js`: calls six Phase 14 GET APIs independently, renders their
+- `app/assets/javascripts/accounting_transactions.js`: calls six sales and payables GET APIs independently, renders their
   tables/reference choices, confirms each real sandbox write, and preserves a UUID per intended submission.
 - `app/assets/javascripts/api_docs.js`: initializes Swagger UI with GET-only interactive execution; POST remains documentation-only.
 - `Quickbooks::Accounts::Query`: GET active QuickBooks accounts for the two dropdowns.
@@ -133,8 +133,8 @@ than recalculated.
 
 Offset/`STARTPOSITION` pages are intentionally simple at this scale. A concurrent insertion can shift later
 offset pages; deterministic order plus browser ID de-duplication avoids showing a duplicate, but this is not a
-point-in-time snapshot export. A cursor/snapshot protocol would require a later explicit phase if that audit
-property becomes necessary.
+point-in-time snapshot export. A cursor/snapshot protocol should be designed explicitly if that audit property
+becomes necessary.
 
 The JSON create request accepts only date, memo, amount, debit Account ID, and credit Account ID, plus a required
 UUID `Idempotency-Key` header. The local audit reservation commits before the QuickBooks call; Rails never holds a
@@ -148,18 +148,20 @@ A repeated completed key with the same canonical five fields is served from the 
 scope appears in both the unique database key and all entity lookup indexes; a QuickBooks entity ID is never
 treated as globally unique.
 
-The Phase 13 create requests follow the same coordinator state machine while retaining entity-specific policy.
+The workforce, tax, and inventory create requests follow the same coordinator state machine while retaining
+entity-specific policy.
 Employee accepts names and optional contact data only. TimeActivity validates an active Employee and whole
 hours/minutes. TaxCode validates a unique name and existing active TaxRate. Inventory Item validates exact ISO
 date, decimal strings through `BigDecimal`, and currently eligible income/COGS/asset Accounts. Each creator owns
 its documented vendor payload and readback comparison; none of those fields or rules are generalized into the
 coordinator. No external HTTP call occurs inside a database transaction.
 
-Phase 14 extends that state machine with six fixed operation/entity pairs. Customer and Vendor validate unique
-active display names. Invoice validates an active Customer and sale Item. Bill validates an active Vendor,
-expense Account, and Accounts Payable Account. Payment reloads one open Invoice and cannot exceed its balance.
-BillPayment reloads one open Bill plus an active bank Account, uses `PayType: Check`, and cannot exceed the Bill
-balance. Transaction creates are single-line by design, and every successful response is read back by returned ID.
+The sales and payables APIs extend that state machine with six fixed operation/entity pairs. Customer and Vendor
+validate unique active display names. Invoice validates an active Customer and sale Item. Bill validates an active
+Vendor, expense Account, and Accounts Payable Account. Payment reloads one open Invoice and cannot exceed its
+balance. BillPayment reloads one open Bill plus an active bank Account, uses `PayType: Check`, and cannot exceed
+the Bill balance. Transaction creates are single-line by design, and every successful response is read back by
+returned ID.
 
 The failure UI stays inside the existing dashboard asset. It uses native HTML, CSS, and JavaScript; there is no
 toast library, frontend framework, event bus, or second error abstraction. Rails remains responsible for the

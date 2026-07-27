@@ -227,8 +227,7 @@ sequenceDiagram
 Employee and TimeActivity are payroll-adjacent Accounting API records, not payroll processing. Tax create is
 limited to a TaxCode using an existing TaxRate. Inventory create uses existing eligible Accounts; it does not
 create purchases, sales, or adjustments. The common coordinator manages only idempotency/audit state. Every
-payload, current-reference check, and readback rule remains in the entity namespace. Phase 13 acceptance sent no
-valid POST.
+payload, current-reference check, and readback rule remains in the entity namespace.
 
 ## Read and create customers, vendors, sales, or payables
 
@@ -284,7 +283,7 @@ sequenceDiagram
 
 Customer and Vendor are non-posting list records. Invoice and Bill create one accounting line. Payment and
 BillPayment apply one decimal amount to one freshly reloaded open source transaction and cannot exceed its
-balance. No valid Phase 14 POST was sent during implementation.
+balance.
 
 ## Open API documentation
 

@@ -33,3 +33,15 @@
 
 # Ignore key files for decrypting credentials and more.
 /config/*.key
+
+# Local-only project files.
+/AGENTS.md
+/.agents/
+/.codex/
+/skills/
+/docs/phase_status.md
+/docs/phases/
+/docs/operator_handoff.md
+/docs/reference_review.md
+/docs/references.md
+/docs/api_examples/

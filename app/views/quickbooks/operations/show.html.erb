@@ -1,6 +1,6 @@
 <% content_for :title, "QuickBooks workforce, tax, and inventory operations" %>
 <% content_for :head do %>
-  <%= javascript_include_tag "operational_capabilities", defer: true, "data-turbo-track": "reload" %>
+  <%= javascript_include_tag "operational_capabilities", defer: true %>
 <% end %>
 
 <main data-operational-capabilities
@@ -34,8 +34,8 @@
 
   <p id="operations-api-status" role="status">Loading supported capabilities through Rails APIs…</p>
 
-  <aside class="capability-note" aria-labelledby="phase-13-boundary">
-    <h2 id="phase-13-boundary">Supported boundary</h2>
+  <aside class="capability-note" aria-labelledby="operations-boundary">
+    <h2 id="operations-boundary">Supported boundary</h2>
     <p>
       Intuit's full Payroll API is closed beta and this sandbox reports Payroll disabled. This page can manage
       public Accounting API Employee records and employee TimeActivity records; it cannot run payroll, calculate

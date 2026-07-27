@@ -340,7 +340,7 @@ paths:
                   - id: 1
                     status: succeeded
                     txn_date: '2026-07-15'
-                    memo: CFO Bridge controlled sandbox validation phase 6 2026-07-15
+                    memo: CFO Bridge controlled sandbox validation 2026-07-15
                     amount: '1.00'
                     debit_account_id: '15'
                     credit_account_id: '20'

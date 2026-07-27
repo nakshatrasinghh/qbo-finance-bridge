@@ -2,7 +2,7 @@
 <% content_for :head do %>
   <%= stylesheet_link_tag "https://unpkg.com/swagger-ui-dist@5.32.8/swagger-ui.css" %>
   <%= javascript_include_tag "https://unpkg.com/swagger-ui-dist@5.32.8/swagger-ui-bundle.js", defer: true %>
-  <%= javascript_include_tag "api_docs", defer: true, "data-turbo-track": "reload" %>
+  <%= javascript_include_tag "api_docs", defer: true %>
 <% end %>
 
 <main class="api-docs">

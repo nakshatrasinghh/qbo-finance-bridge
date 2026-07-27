@@ -64,6 +64,8 @@
     <%= button_to "Disconnect and revoke access",
                   disconnect_quickbooks_connection_path(@connection),
                   method: :delete,
-                  data: { turbo_confirm: "Revoke this sandbox connection and clear its local tokens?" } %>
+                  form: {
+                    onsubmit: "return window.confirm('Revoke this sandbox connection and clear its local tokens?')"
+                  } %>
   <% end %>
 </main>
