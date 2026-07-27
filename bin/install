@@ -1,0 +1,277 @@
+#!/usr/bin/env ruby
+
+require "io/console"
+require "pathname"
+require "rbconfig"
+require "securerandom"
+require "yaml"
+
+ROOT = Pathname.new(__dir__).join("..").expand_path
+GUIDE = ROOT.join("INSTALLATION.md")
+RUBY_VERSION_FILE = ROOT.join(".ruby-version")
+LOCKFILE = ROOT.join("Gemfile.lock")
+MASTER_KEY_PATH = ROOT.join("config/master.key")
+CREDENTIALS_PATH = ROOT.join("config/credentials.yml.enc")
+REDIRECT_URI = "http://localhost:3000/quickbooks/connections/callback"
+
+def fail_install(message)
+  warn "\nInstallation stopped: #{message}"
+  warn "See #{GUIDE} for prerequisites, manual setup, and troubleshooting."
+  exit 1
+end
+
+def run!(*command)
+  puts "\n> #{command.join(" ")}"
+  system(*command, exception: true)
+rescue SystemCallError
+  fail_install("Could not run #{command.first.inspect}.")
+rescue RuntimeError
+  fail_install("The command failed: #{command.join(" ")}")
+end
+
+def required_ruby_version
+  RUBY_VERSION_FILE.read.strip
+end
+
+def check_ruby!
+  return if RUBY_VERSION == required_ruby_version
+
+  unless ENV["FINANCE_BRIDGE_INSTALL_RUBY_RELAUNCH"] == "1"
+    rbenv_available = system("rbenv", "--version", out: File::NULL, err: File::NULL)
+    if rbenv_available
+      puts "Activating Ruby #{required_ruby_version} with rbenv..."
+      $stdout.flush
+      exec(
+        { "FINANCE_BRIDGE_INSTALL_RUBY_RELAUNCH" => "1", "RBENV_VERSION" => required_ruby_version },
+        "rbenv",
+        "exec",
+        "ruby",
+        __FILE__,
+        *ARGV
+      )
+    end
+  end
+
+  fail_install(
+    "Ruby #{required_ruby_version} is required, but this script is running with Ruby #{RUBY_VERSION}. " \
+      "Activate the repository's .ruby-version with rbenv, asdf, or another Ruby manager, then run bin/install again."
+  )
+end
+
+def locked_bundler_version
+  match = LOCKFILE.read.match(/^BUNDLED WITH\s*\n\s+(\S+)$/)
+  fail_install("Gemfile.lock does not declare a Bundler version.") unless match
+
+  match[1]
+end
+
+def bundle_command(version, *arguments)
+  [RbConfig.ruby, "-S", "bundle", "_#{version}_", *arguments]
+end
+
+def ensure_bundle!
+  version = locked_bundler_version
+  available =
+    system(
+      RbConfig.ruby,
+      "-S",
+      "gem",
+      "list",
+      "--installed",
+      "--exact",
+      "bundler",
+      "--version",
+      version,
+      out: File::NULL
+    )
+
+  unless available
+    puts "\nInstalling the Bundler version recorded by Gemfile.lock..."
+    run! RbConfig.ruby, "-S", "gem", "install", "bundler", "--version", version, "--no-document"
+  end
+
+  return if system(*bundle_command(version, "check"))
+
+  run!(*bundle_command(version, "install"))
+end
+
+def load_encryption_support!
+  ENV["BUNDLE_GEMFILE"] = ROOT.join("Gemfile").to_s
+  require "bundler/setup"
+  require "active_support/encrypted_file"
+end
+
+def encrypted_credentials
+  ActiveSupport::EncryptedFile.new(
+    content_path: CREDENTIALS_PATH,
+    key_path: MASTER_KEY_PATH,
+    env_key: "RAILS_MASTER_KEY",
+    raise_if_missing_key: true
+  )
+end
+
+def credentials_data
+  YAML.safe_load(encrypted_credentials.read, aliases: true) || {}
+rescue ActiveSupport::EncryptedFile::MissingKeyError
+  fail_install("The credentials file exists, but its matching master key is missing.")
+rescue ActiveSupport::MessageEncryptor::InvalidMessage
+  fail_install("config/credentials.yml.enc cannot be decrypted with the available master key.")
+rescue Psych::Exception
+  fail_install("The decrypted credentials are not valid YAML.")
+end
+
+def required_credential_paths
+  [
+    %w[active_record_encryption primary_key],
+    %w[active_record_encryption deterministic_key],
+    %w[active_record_encryption key_derivation_salt],
+    %w[quickbooks client_id],
+    %w[quickbooks client_secret],
+    %w[quickbooks redirect_uri]
+  ]
+end
+
+def fetch_nested(data, path)
+  path.reduce(data) { |value, key| value.is_a?(Hash) ? value[key] : nil }
+end
+
+def verify_credentials!
+  data = credentials_data
+  missing =
+    required_credential_paths.reject do |path|
+      value = fetch_nested(data, path)
+      value.respond_to?(:empty?) ? !value.empty? : !value.nil?
+    end
+
+  unless missing.empty?
+    fail_install("Missing credential entries: #{missing.map { |path| path.join(".") }.join(", ")}.")
+  end
+
+  return if fetch_nested(data, %w[quickbooks redirect_uri]) == REDIRECT_URI
+
+  fail_install("quickbooks.redirect_uri must be exactly #{REDIRECT_URI}.")
+end
+
+def prompt(label)
+  print "#{label}: "
+  value = $stdin.gets&.strip
+  fail_install("#{label} is required.") if value.nil? || value.empty?
+  value
+end
+
+def prompt_secret(label)
+  print "#{label}: "
+  value = ($stdin.tty? ? $stdin.noecho(&:gets)&.strip.tap { puts } : $stdin.gets&.strip)
+  fail_install("#{label} is required.") if value.nil? || value.empty?
+  value
+end
+
+def create_credentials!
+  puts <<~MESSAGE
+
+    No local Rails credentials were found.
+    Complete the Intuit portal steps in INSTALLATION.md before continuing.
+    The values entered below stay in memory and are written only to the ignored encrypted credentials file.
+  MESSAGE
+
+  client_id = prompt("Intuit Development Client ID")
+  client_secret = prompt_secret("Intuit Development Client Secret")
+  master_key = ActiveSupport::EncryptedFile.generate_key
+  content = {
+    "secret_key_base" => SecureRandom.hex(64),
+    "active_record_encryption" => {
+      "primary_key" => SecureRandom.alphanumeric(32),
+      "deterministic_key" => SecureRandom.alphanumeric(32),
+      "key_derivation_salt" => SecureRandom.alphanumeric(32)
+    },
+    "quickbooks" => {
+      "client_id" => client_id,
+      "client_secret" => client_secret,
+      "redirect_uri" => REDIRECT_URI
+    }
+  }
+
+  MASTER_KEY_PATH.write(master_key)
+  File.chmod(0o600, MASTER_KEY_PATH)
+  encrypted_credentials.write(YAML.dump(content))
+  File.chmod(0o600, CREDENTIALS_PATH)
+rescue StandardError
+  MASTER_KEY_PATH.delete if MASTER_KEY_PATH.exist?
+  CREDENTIALS_PATH.delete if CREDENTIALS_PATH.exist?
+  raise
+end
+
+def prepare_credentials!
+  if MASTER_KEY_PATH.exist? && CREDENTIALS_PATH.exist?
+    puts "\nReusing the existing ignored local credentials."
+  elsif MASTER_KEY_PATH.exist? || CREDENTIALS_PATH.exist?
+    fail_install("Only one file in the credentials/master-key pair exists; both are required.")
+  else
+    create_credentials!
+  end
+
+  verify_credentials!
+  puts "Encrypted credentials: ready"
+end
+
+def check_credentials!
+  unless MASTER_KEY_PATH.exist? && CREDENTIALS_PATH.exist?
+    fail_install("The local credentials/master-key pair is missing. Run bin/install first.")
+  end
+
+  verify_credentials!
+  puts "Encrypted credentials: ready"
+end
+
+def check_installation!
+  version = locked_bundler_version
+  run!(*bundle_command(version, "check"))
+  load_encryption_support!
+  check_credentials!
+  run!(
+    RbConfig.ruby,
+    ROOT.join("bin/rails").to_s,
+    "runner",
+    "Quickbooks::Configuration.new.validate!; ActiveRecord::Base.connection.execute('SELECT 1'); " \
+      "puts 'Rails, PostgreSQL, encryption, and QuickBooks configuration: ready'"
+  )
+end
+
+def install!
+  ensure_bundle!
+  load_encryption_support!
+  prepare_credentials!
+  run! RbConfig.ruby, ROOT.join("bin/setup").to_s, "--skip-server"
+  puts <<~MESSAGE
+
+    Installation complete.
+
+    Start the application:
+      QUICKBOOKS_ENV=sandbox bin/dev
+
+    Then open:
+      http://localhost:3000/quickbooks/connections
+
+    Follow INSTALLATION.md to authorize the developer's QuickBooks sandbox and validate the checkout.
+  MESSAGE
+end
+
+Dir.chdir(ROOT)
+
+case ARGV
+when ["--help"], ["-h"]
+  puts <<~HELP
+    Usage:
+      bin/install          Install dependencies, create local credentials when needed, and prepare PostgreSQL.
+      bin/install --check  Verify dependencies, credentials, PostgreSQL, and application configuration.
+
+    Detailed prerequisites and Intuit portal steps: #{GUIDE}
+  HELP
+when ["--check"]
+  check_ruby!
+  check_installation!
+else
+  fail_install("Unknown arguments: #{ARGV.join(" ")}") unless ARGV.empty?
+  check_ruby!
+  install!
+end

@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: QuickBooks CFO Bridge API
+  title: QuickBooks Finance Bridge API
   version: 1.5.2
   description: |
-    JSON endpoints used by the local QuickBooks sandbox dashboard. Rails exposes twenty-nine same-origin CFO
+    JSON endpoints used by the local QuickBooks sandbox dashboard. Rails exposes twenty-nine same-origin finance
     JSON operations: five reports, Account and Journal Entry reads, local Journal Entry audit history, and
     controlled GET/POST pairs for Journal Entries, Employees, TimeActivities, TaxCodes, Inventory Items,
     Customers, Vendors, Invoices, Bills, Customer Payments, and Bill Payments. A separate read-only endpoint
@@ -1296,7 +1296,7 @@ components:
     railsSession:
       type: apiKey
       in: cookie
-      name: _qbo_cfo_bridge_session
+      name: _qbo_finance_bridge_session
       description: Browser-managed same-origin Rails session cookie.
     csrfToken:
       type: apiKey

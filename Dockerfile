@@ -2,8 +2,8 @@
 # check=error=true
 
 # This Dockerfile is designed for production, not development. Build and run it by hand:
-# docker build -t qbo_cfo_bridge .
-# docker run -d -p 80:80 -e RAILS_MASTER_KEY=<value from config/master.key> --name qbo_cfo_bridge qbo_cfo_bridge
+# docker build -t qbo_finance_bridge .
+# docker run -d -p 80:80 -e RAILS_MASTER_KEY=<value from config/master.key> --name qbo_finance_bridge qbo_finance_bridge
 
 # For a containerized dev environment, see Dev Containers: https://guides.rubyonrails.org/getting_started_with_devcontainer.html
 

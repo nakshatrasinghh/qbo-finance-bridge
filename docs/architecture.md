@@ -1,12 +1,12 @@
 # Architecture
 
-This is a small Rails monolith. Rails serves three HTML/vanilla-JavaScript dashboards, exposes twenty-nine CFO JSON
+This is a small Rails monolith. Rails serves three HTML/vanilla-JavaScript dashboards, exposes twenty-nine finance JSON
 operations, stores the encrypted QuickBooks connection and audited create operations, and calls the QuickBooks
 Online sandbox REST API. There is no separate frontend project/process or generic integration framework.
 
 ```mermaid
 flowchart TB
-  Browser["CFO browser"] --> FinancialPage["Financial records HTML page"]
+  Browser["Finance browser"] --> FinancialPage["Financial records HTML page"]
   Browser --> OperationsPage["Workforce, tax, and inventory HTML page"]
   Browser --> TransactionsPage["Sales and payables HTML page"]
   Browser --> Swagger["Swagger UI"]

@@ -5,7 +5,7 @@ The current app exposes a controlled local QuickBooks Online sandbox surface.
 | Data | QuickBooks representation | GET | POST | Accounting impact | Status |
 |---|---|---|---|---|---|
 | Company connection | CompanyInfo/OAuth | Yes | OAuth only | None | Implemented |
-| CFO reports | ProfitAndLoss, BalanceSheet, CashFlow, GeneralLedger, TrialBalance | Five explicit Rails GETs | No report POST | None; QuickBooks calculates from transactions | Implemented |
+| Finance reports | ProfitAndLoss, BalanceSheet, CashFlow, GeneralLedger, TrialBalance | Five explicit Rails GETs | No report POST | None; QuickBooks calculates from transactions | Implemented |
 | Journal Entry account choices | Account | Eligible active Account query | No Account creation | None from reading | Implemented |
 | Financial records | JournalEntry | Date-filtered and paginated GET | Audited/idempotent balanced create + readback | Selected Accounts are debited/credited | Implemented |
 | Submission audit history | **Local-only** `quickbooks_sync_operations` | PostgreSQL GET | Rows produced by create APIs | None from reading | Implemented |

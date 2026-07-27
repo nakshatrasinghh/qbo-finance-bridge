@@ -43,7 +43,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant B as CFO browser
+  participant B as Finance browser
   participant J as financial_records.js
   participant A as Rails FinancialReportsController
   participant R as Reports::Query and Parser
@@ -75,7 +75,7 @@ neither Rails nor JavaScript calculates statement totals, and no report payload 
 
 ```mermaid
 sequenceDiagram
-  participant B as CFO browser
+  participant B as Finance browser
   participant J as financial_records.js
   participant A as Rails read APIs
   participant Q as QuickBooks sandbox
@@ -98,7 +98,7 @@ sequenceDiagram
   B->>J: Apply memo / audit status
   J->>M: Derive visible records without mutation
   M-->>J: Filtered Journal Entries and audit operations
-  J-->>B: Render visible rows; no API request
+  J-->>B: Render visible rows, no API request
   B->>J: Download a visible-data CSV
   J->>J: Quote cells and neutralize formula prefixes
   J->>F: Temporary Blob URL download
@@ -176,7 +176,7 @@ OAuth uses the existing encrypted/signed Rails session for temporary state and A
 
 ```mermaid
 sequenceDiagram
-  participant B as CFO browser
+  participant B as Finance browser
   participant J as operational_capabilities.js
   participant A as Explicit Rails entity API
   participant S as Entity-specific Submit
@@ -233,7 +233,7 @@ payload, current-reference check, and readback rule remains in the entity namesp
 
 ```mermaid
 sequenceDiagram
-  participant B as CFO browser
+  participant B as Finance browser
   participant J as accounting_transactions.js
   participant A as Explicit Rails entity API
   participant S as Entity-specific Submit
@@ -288,7 +288,7 @@ balance.
 ## Open API documentation
 
 `GET /api-docs` renders a separate Swagger UI page. It fetches `GET /api-docs/openapi.yaml`, which describes the
-twenty-nine CFO JSON operations and `GET /health`. Swagger can execute only documented GET operations. All eleven
+twenty-nine finance JSON operations and `GET /health`. Swagger can execute only documented GET operations. All eleven
 POST operations are visible but their execution controls are disabled so API exploration cannot create records.
 
 ## Dashboard API failure

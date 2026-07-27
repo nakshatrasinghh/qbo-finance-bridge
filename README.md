@@ -1,6 +1,6 @@
 # QuickBooks financial records dashboard
 
-This is one simple Ruby on Rails application for a CFO to:
+This is one simple Ruby on Rails application for finance teams to:
 
 - connect a QuickBooks Online sandbox;
 - GET QuickBooks-generated Profit & Loss, Balance Sheet, Cash Flow, General Ledger, and Trial Balance reports
@@ -29,12 +29,12 @@ disabled; the setup, operating boundaries, and failure behavior are documented b
 
 The canonical source repository is
 [`nakshatrasinghh/qbo-finance-bridge`](https://github.com/nakshatrasinghh/qbo-finance-bridge).
-`config/credentials.yml.enc` is encrypted and versioned; `config/master.key`, `.env*`, logs, temp files, and
-storage remain local and ignored.
+`config/credentials.yml.enc`, `config/master.key`, `.env*`, logs, temp files, and storage remain local and
+ignored.
 
 ## Rails JSON APIs
 
-The CFO data-exchange surface is exactly twenty-nine operations:
+The finance data-exchange surface is exactly twenty-nine operations:
 
 ```text
 GET  /api/v1/quickbooks/connections/:connection_id/accounts
@@ -128,7 +128,7 @@ Implementation details and sequence diagrams are in
 [`docs/architecture.md`](docs/architecture.md) and [`docs/data_flow.md`](docs/data_flow.md).
 
 The three connection-owned HTML routes are frontend shells only. Browser JavaScript calls the JSON APIs after
-load; ERB rendering never exchanges CFO data with QuickBooks.
+load; ERB rendering never exchanges finance data with QuickBooks.
 
 The application also retains its read-only `GET /health` JSON liveness endpoint.
 
@@ -140,7 +140,7 @@ Open the API documentation at:
 http://localhost:3000/api-docs
 ```
 
-The page renders the checked-in OpenAPI 3.0.3 contract at `docs/openapi.yaml`. It documents the twenty-nine CFO
+The page renders the checked-in OpenAPI 3.0.3 contract at `docs/openapi.yaml`. It documents the twenty-nine finance
 data operations and health, including read models, eleven audited/idempotent create contracts, replay responses, and
 normalized errors. The local Journal Entry audit GET is explicitly PostgreSQL-only. Swagger UI permits
 interactive GET requests only. POST operations are visible as documentation but cannot be executed from Swagger
@@ -171,15 +171,25 @@ Rails sends two lines with the same amount, so debit equals credit. Accounts Rec
 - PostgreSQL 16
 - Faraday 2.14.3
 
+## Installation
+
+Follow [`INSTALLATION.md`](INSTALLATION.md) to install Ruby and PostgreSQL, create developer-specific encrypted
+credentials, configure an Intuit sandbox app, prepare the databases, connect QuickBooks, and validate the
+checkout.
+
+After installing Ruby 3.4.6 and PostgreSQL 16, the primary setup command is:
+
+```bash
+bin/install
+```
+
 ## Run the app
 
 From the repository root:
 
 ```bash
-cd ruby-cfo-bridge
 brew services start postgresql@16
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/setup --skip-server
-QUICKBOOKS_ENV=sandbox RBENV_VERSION=3.4.6 rbenv exec ruby bin/dev
+QUICKBOOKS_ENV=sandbox bin/dev
 ```
 
 Open:
@@ -195,20 +205,9 @@ This is the frontend. The JavaScript is served by Rails/Propshaft. No `npm`, `ya
 
 ## QuickBooks credentials
 
-This checkout uses encrypted Rails credentials, not `.env` files. Edit them with:
-
-```bash
-EDITOR="code --wait" RBENV_VERSION=3.4.6 rbenv exec ruby bin/rails credentials:edit
-```
-
-Keep the existing encryption keys and add/retain:
-
-```yaml
-quickbooks:
-  client_id: YOUR_DEVELOPMENT_CLIENT_ID
-  client_secret: YOUR_DEVELOPMENT_CLIENT_SECRET
-  redirect_uri: http://localhost:3000/quickbooks/connections/callback
-```
+`bin/install` securely asks for each developer's Intuit Development Client ID and Client Secret, generates the
+Rails and Active Record Encryption keys, and writes an ignored encrypted credentials/master-key pair. Developers
+do not manually invent encryption values.
 
 In the Intuit developer portal, use Development keys, enable the QuickBooks accounting scope, and register this exact redirect URI:
 
@@ -216,7 +215,9 @@ In the Intuit developer portal, use Development keys, enable the QuickBooks acco
 http://localhost:3000/quickbooks/connections/callback
 ```
 
-`config/credentials.yml.enc` is encrypted. `config/master.key` stays local and ignored. Never paste the client secret, access token, refresh token, or master key into documentation or version control.
+Both `config/credentials.yml.enc` and `config/master.key` stay local and ignored. Never paste the client secret,
+access token, refresh token, encryption keys, or master key into documentation or version control. The complete
+workflow, manual fallback, and key explanations are in [`INSTALLATION.md`](INSTALLATION.md).
 
 Environment variables remain available for deployment/CI, but they are not required for this configured checkout:
 
@@ -318,7 +319,7 @@ The dashboard requests 25 records per page and keeps the two read sources indepe
 - every CSV field is quoted, embedded quotes are escaped, and spreadsheet formula prefixes are neutralized.
 
 The downloads are created temporarily in the browser; Rails does not add an export route or write a server-side
-file. The public CFO API surface is therefore the twenty-nine operations listed above.
+file. The public finance API surface is therefore the twenty-nine operations listed above.
 
 ### Journal Entry POST
 

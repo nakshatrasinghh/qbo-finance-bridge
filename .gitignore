@@ -31,7 +31,8 @@
 /public/assets
 .idea
 
-# Ignore key files for decrypting credentials and more.
+# Ignore local encrypted credentials and their decryption keys.
+/config/credentials.yml.enc
 /config/*.key
 
 # Local-only project files.

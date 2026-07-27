@@ -7,4 +7,4 @@ test:
 production:
   adapter: redis
   url: <%= ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" } %>
-  channel_prefix: qbo_cfo_bridge_production
+  channel_prefix: qbo_finance_bridge_production
