@@ -96,7 +96,7 @@ flowchart TB
 - `QuickbooksSyncOperation`: local idempotency and audit evidence for one allowed create attempt, scoped by
   connection and a fixed operation/entity pair; it stores no OAuth token or client secret.
 
-The dashboard does not use local Account mappings. The old `account_mappings` table remains in the database from earlier work but has no route, controller, view, or role in the current workflow.
+The dashboard does not use local Account mappings; Journal Entries use currently active QuickBooks Account IDs.
 
 ## Request boundaries
 

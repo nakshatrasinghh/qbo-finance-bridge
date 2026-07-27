@@ -55,7 +55,7 @@ record, not a native QuickBooks entity and not a second accounting ledger. Quick
 | `request_payload` | jsonb | No | Original explicit canonical fields for the selected operation | JSON object | **Confidential business/financial metadata** | Rails API input | Nonempty JSON object check | Retain as the submitted audit fact; never add tokens/secrets |
 | `status` | varchar | No | Conservative operation state | `pending`, `succeeded`, `rejected`, or `uncertain` | Internal operational metadata | Rails state transition | Allowed-values and completion/error-state checks | Retain; unresolved states require reconciliation |
 | `quickbooks_entity_type` | varchar | No | Native entity kind fixed for this operation | `Invoice` | Internal | Rails | Pairing check permits only the eleven documented operation/entity combinations | Retain with external ID |
-| `quickbooks_entity_id` | varchar | Yes | Realm-scoped QuickBooks ID, when confirmed or returned before a later failure | `146` | Confidential business/financial metadata | QuickBooks response | Safe 1–255 identifier check; uniquely indexed only with connection/entity type when present | Retain; never treat as globally unique |
+| `quickbooks_entity_id` | varchar | Yes | Realm-scoped QuickBooks ID, when confirmed or returned before a later failure | `12345` | Confidential business/financial metadata | QuickBooks response | Safe 1–255 identifier check; uniquely indexed only with connection/entity type when present | Retain; never treat as globally unique |
 | `result_payload` | jsonb | No | Normalized successful entity result used for safe replay | Entity JSON object | **Confidential business/financial metadata** | Verified QuickBooks readback | JSON object; nonempty when succeeded | Retain for deterministic replay and audit evidence |
 | `error_code` | varchar(64) | Yes | Safe local/upstream code for rejected or uncertain outcomes | `quickbooks_timeout` | Internal operational metadata | Rails error normalization | Present only for rejected/uncertain states | Retain for investigation; raw vendor bodies are not stored |
 | `completed_at` | timestamp | Yes | Time a non-pending outcome was recorded | `2026-07-15T15:30:00Z` | Internal operational metadata | Rails | Required unless pending; absent while pending | Retain for chronology and reconciliation |
@@ -101,12 +101,6 @@ compensation, and address. TimeActivity keeps Employee ID/date/hours/minutes/des
 name/rate/applicability. Inventory Item keeps master-data fields, decimal strings, and supporting Account IDs.
 Successful results store only the normalized API projection after vendor readback.
 
-Sandbox validation created four succeeded rows: operation `25` Employee `400000001`, operation `26` TimeActivity
-`1073741824`, operation `27` TaxCode `4`, and operation `28` Item `19`. Each retains its canonical request and
-normalized creation-time readback. Same-key replay returned those stored results and created no additional audit
-row or QuickBooks entity. The current audit ledger therefore has twelve rows: eleven succeeded, one rejected, and
-none pending or uncertain.
-
 ### Sales and payables audited create types
 
 The database and Rails model additionally permit exactly
@@ -118,18 +112,6 @@ Customer/Vendor requests retain names and optional contact data. Invoice/Bill re
 decimal amount strings, description, and realm-scoped references. Payment requests retain one source transaction
 ID, date, amount, and, for BillPayment, one bank Account ID. Successful results are the normalized readback
 projection.
-
-Sandbox validation created six succeeded rows using these fixed pairs: operation `4` Customer `58`, operation `5` Vendor
-`59`, operation `6` Invoice `147`, operation `7` Payment `148`, operation `8` Bill `149`, and operation `9`
-BillPayment `150`. Each row retains its original normalized readback for deterministic idempotent replay. That
-stored result is intentionally the creation-time fact; for example, Invoice/Bill replay still shows the original
-open balance even though later linked payments reduced the current QuickBooks balance to zero. Current state is
-read through the entity GET APIs. Same-key replay created no additional audit row or QuickBooks entity.
-
-Operation `24` preserves a later duplicate-Customer browser attempt as `rejected` with
-`quickbooks_customer_input_invalid`, no entity ID, and an empty result payload. The active-name lookup stopped the
-submission before a QuickBooks Customer POST. Keeping this row is intentional audit behavior; it is not a native
-QuickBooks record.
 
 ### Browser-only CSV projections
 
@@ -157,7 +139,7 @@ return page metadata, but neither the request nor page state is stored.
 The local audit date predicate applies to the preserved canonical Journal Entry date at
 `request_payload->>'txn_date'`, not `created_at`. Ordering remains `created_at DESC, id DESC`; the existing
 connection/created-at index supports scoping and chronology. No JSON-expression date index was added for the
-current one-row audit dataset. That decision should be revisited only with measured growth and a PostgreSQL query
+current bounded audit volume. That decision should be revisited only with measured growth and a PostgreSQL query
 plan. The Journal Entry page is native QuickBooks data and remains unpersisted locally.
 
 ### Financial report projections
@@ -173,13 +155,12 @@ report type, returned basis when applicable, currency, QuickBooks start/end peri
 ordered cell strings. It is not stored in Rails or PostgreSQL and contains no OAuth token, client secret, raw
 vendor response, or local idempotency data.
 
-General Ledger and Trial Balance reuse this projection unchanged. Trial Balance normalized successfully. The
-corrected `reports/GeneralLedger` request also normalized successfully with 8 columns and 452 rows. Neither report
-payload is persisted.
+General Ledger and Trial Balance reuse this projection unchanged. Neither report payload is persisted.
 
 ## `account_mappings`
 
-> Legacy note: this table remains from the earlier mapping experiment, but the current financial-record dashboard does not read or write it. Its routes, controller, operation, and page were removed. Journal Entries use currently active QuickBooks Account IDs selected directly from the dashboard.
+The current dashboard does not read or write this table. Journal Entries use currently active QuickBooks Account
+IDs selected directly from the dashboard.
 
 One row represents a deliberate local association from one source-system account code to one currently active QuickBooks Account in one authorized connection. It is integration metadata, not a QuickBooks entity and not a posting record.
 
@@ -190,13 +171,13 @@ One row represents a deliberate local association from one source-system account
 | `source_system` | varchar | No | Stable namespace for the inbound ledger/source | `erp` | Internal integration metadata | Manual input | Trim-aware 1–100 check; part of unique source identity | Keep with mapping; matching is case-sensitive |
 | `source_account_code` | varchar | No | Stable account identifier within the source system | `6100` | Confidential financial metadata | Manual input | Trim-aware 1–100 check; unique with connection/source system | Keep with mapping; do not silently rename |
 | `source_account_name` | varchar | No | Human-readable source account label | `Office expense` | Confidential financial metadata | Manual input | Trim-aware 1–255 check | Keep for review; code, not name, is lookup key |
-| `quickbooks_account_id` | varchar | No | Intuit Account entity ID selected from an active query | `15` | Confidential financial metadata | QuickBooks read | Trim-aware 1–255 check; indexed with connection | Keep while mapped; never assume it is a realm ID |
+| `quickbooks_account_id` | varchar | No | Intuit Account entity ID selected from an active query | `1001` | Confidential financial metadata | QuickBooks read | Trim-aware 1–255 check; indexed with connection | Keep while mapped; never assume it is a realm ID |
 | `quickbooks_account_name` | varchar | No | Name/fully qualified name observed when validated | `Office Expenses` | Confidential financial metadata | QuickBooks read | Trim-aware 1–255 check | Snapshot for review; may become stale |
 | `quickbooks_account_type` | varchar | No | QuickBooks Account type observed when validated | `Expense` | Confidential financial metadata | QuickBooks read | Trim-aware 1–100 check | Snapshot for future policy/review |
 | `quickbooks_account_subtype` | varchar | Yes | QuickBooks detail type when present | `OfficeGeneralAdministrativeExpenses` | Confidential financial metadata | QuickBooks read | Null or trim-aware 1–100 check | Snapshot; optional because upstream may omit it |
-| `last_verified_at` | timestamp | No | Time selected ID was last confirmed in a fresh active Account query | `2026-07-15T00:30:00Z` | Internal operational metadata | Local after QuickBooks read | Not null | Keep; any future posting use must define acceptable age/revalidation |
-| `created_at` | timestamp | No | Initial local persistence time | `2026-07-15T00:30:00Z` | Internal | Rails | Not null | Keep with mapping |
-| `updated_at` | timestamp | No | Most recent local update time | `2026-07-15T00:30:00Z` | Internal | Rails | Not null | Keep with mapping |
+| `last_verified_at` | timestamp | No | Time selected ID was last confirmed in a fresh active Account query | `2026-01-15T00:30:00Z` | Internal operational metadata | Local after QuickBooks read | Not null | Keep; any future posting use must define acceptable age/revalidation |
+| `created_at` | timestamp | No | Initial local persistence time | `2026-01-15T00:30:00Z` | Internal | Rails | Not null | Keep with mapping |
+| `updated_at` | timestamp | No | Most recent local update time | `2026-01-15T00:30:00Z` | Internal | Rails | Not null | Keep with mapping |
 
 ### Table-level integrity and lookup paths
 
@@ -206,25 +187,3 @@ One row represents a deliberate local association from one source-system account
 - Seven trim-aware checks mirror required/maximum-length model rules for writes that bypass validation.
 - `AccountMapping.indexed_by_source_account_code` resolves a bounded list of at most 1,000 codes with one indexed SQL query, returning a Hash keyed by source code.
 - Names/types are validation snapshots. They do not replace the QuickBooks Account as source of truth and may be refreshed/revalidated before a later posting operation.
-
-### Reserved demo mapping
-
-The earlier demo flow reused the same schema rather than adding a demo-only table. One row has a fixed source
-identity so repeated actions update it instead of creating a second mapping:
-
-| Field | Reserved/live value | Meaning |
-|---|---|---|
-| `quickbooks_connection_id` | Current connected sandbox row | Keeps the mapping inside one realm |
-| `source_system` | `qbo_cfo_bridge_demo` | Distinguishes application-owned learning data from future inbound ledgers |
-| `source_account_code` | `operating_expense` | Stable lookup key for this one demo mapping |
-| `source_account_name` | `CFO Bridge Demo Operating Expense` | Human-readable fixed source label |
-| `quickbooks_account_id` | `1150040000` in the validated sandbox | Returned QuickBooks Account entity ID, read back after create |
-| `quickbooks_account_name` | `CFO Bridge Demo Operating Expense` | QuickBooks name/fully qualified name snapshot |
-| `quickbooks_account_type` | `Expense` | Places future postings under expenses on Profit and Loss |
-| `quickbooks_account_subtype` | `Travel` in the validated sandbox | Detail type QuickBooks assigned when only the required Expense type was sent; it does not change the primary P&L classification |
-| `last_verified_at` | Refreshed on every create/reuse action | Evidence that the ID/name/type were most recently confirmed active |
-
-The unique source-identity index makes this mapping an updateable reservation locally. It is not a full remote
-idempotency ledger: QuickBooks name uniqueness plus query-before-create provide only bounded demo protection.
-Future arbitrary financial writes require explicit idempotency/audit records rather than copying this name-based
-approach.

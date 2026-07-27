@@ -2,12 +2,10 @@ module Quickbooks
   module JournalEntries
     class Create
       INELIGIBLE_ACCOUNT_TYPES = ["Accounts Payable", "Accounts Receivable"].freeze
-      EXCLUDED_ACCOUNT_NAMES = ["CFO Bridge Demo Operating Expense"].freeze
       AMOUNT_PATTERN = /\A\d{1,12}(?:\.\d{1,2})?\z/
 
       def self.eligible_account?(account)
-        account && INELIGIBLE_ACCOUNT_TYPES.exclude?(account.account_type) &&
-          EXCLUDED_ACCOUNT_NAMES.exclude?(account.name)
+        account && INELIGIBLE_ACCOUNT_TYPES.exclude?(account.account_type)
       end
 
       def initialize(

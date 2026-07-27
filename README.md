@@ -18,9 +18,9 @@ This is one simple Ruby on Rails application for a CFO to:
 - GET and POST Customers, Vendors, one-line Invoices, one-line Bills, customer Payments applied to open Invoices,
   and check-style BillPayments applied to open Bills.
 
-There is no separate frontend project or process, account-mapping screen, demo-account creator, or generic
-integration framework. Rails serves a small vanilla-JavaScript dashboard. The financial-report, Account, and
-Journal Entry APIs call QuickBooks; the audit-history API reads PostgreSQL only.
+There is no separate frontend project or generic integration framework. Rails serves a small vanilla-JavaScript
+dashboard. The financial-report, Account, and Journal Entry APIs call QuickBooks; the audit-history API reads
+PostgreSQL only.
 
 ## MVP status
 
@@ -104,7 +104,7 @@ record.
 
 | API surface | GET preprocessing | POST preprocessing |
 |---|---|---|
-| Accounts (1 GET) | Pages through active Accounts, validates required fields and duplicate IDs, sorts display names, and removes Accounts Receivable, Accounts Payable, and the legacy demo Account from Journal Entry choices. | None; Account creation is not exposed. |
+| Accounts (1 GET) | Pages through active Accounts, validates required fields and duplicate IDs, sorts display names, and removes Accounts Receivable and Accounts Payable from Journal Entry choices. | None; Account creation is not exposed. |
 | Financial reports (5 GETs) | Validates report-specific dates, six-month period limits, and supported Cash/Accrual input; validates currency, timestamps, columns, and decimal money cells; flattens recursive section/data/summary rows while preserving order and depth. | None; Rails does not calculate, persist, or modify report totals. |
 | Journal Entries (GET/POST) | Validates date filters and bounded pagination, queries deterministic pages, keeps Journal Entry lines, extracts Account references, parses decimal amounts, and derives a balanced flag. | Validates an exact date, memo, positive amount, and two different eligible active Accounts; creates equal Debit/Credit lines and verifies the returned posting. |
 | Journal Entry audit (1 GET) | Reads only connection-scoped `journal_entry_create` rows from PostgreSQL, filters by the original transaction date, paginates, and omits keys, digests, raw payloads, tokens, and stored result bodies. It does not call QuickBooks. | Rows are produced by the Journal Entry create flow; there is no audit POST endpoint. |
@@ -241,37 +241,19 @@ Opening the page causes browser JavaScript to perform four Rails API requests:
    and makes no QuickBooks request;
 4. `GET .../reports/profit_and_loss`, which loads the default rolling six-month Accrual statement.
 
-Live sandbox validation on 2026-07-15 returned 87 eligible Accounts. The Journal Entry count is live QuickBooks
-data and changes as sandbox transactions are added.
-
 ### Workforce, tax, and inventory operations
 
 The separate `/quickbooks/connections/:connection_id/operations` page loads four independent GET APIs after its
-HTML shell renders. The read-only baseline returned 2 active Employees, 5 TimeActivities, 5 TaxCodes, 3 TaxRates,
-2 TaxAgencies, and 4 Inventory Items. It also found one eligible Account for each required inventory role.
+HTML shell renders.
 
-The payroll scope is intentionally limited. Intuit's dedicated Payroll API is closed beta and the connected
-sandbox reports payroll disabled, so this app does not run payroll, calculate wages, create paychecks, manage
-deductions, or file payroll tax. It supports public Accounting API Employee records and employee TimeActivities
-only.
+The payroll scope is intentionally limited. The app does not run payroll, calculate wages, create paychecks,
+manage deductions, or file payroll tax. It supports public Accounting API Employee records and employee
+TimeActivities only.
 
-Each of the four new POST APIs requires Rails CSRF plus a UUID `Idempotency-Key`, reserves a connection-scoped
+Each of the four POST APIs requires Rails CSRF plus a UUID `Idempotency-Key`, reserves a connection-scoped
 audit row before external HTTP, validates current QuickBooks references, forwards the UUID as `requestid`, and
 reads the created record back before reporting HTTP 201. A matching successful replay returns HTTP 200 without a
 new QuickBooks call; conflicting or unresolved reuse returns HTTP 409.
-
-Live validation covered all four create paths. Employee `400000001`, linked TimeActivity `1073741824`, TaxCode
-`4`, and zero-opening Inventory Item `19` were each created and read back with HTTP 201. Their local operations
-are `25` through `28`; all four same-key replays returned HTTP 200 with the original IDs. The resulting distinct
-counts were 3 Employees, 6 TimeActivities, 6 TaxCodes, 3 TaxRates, 2 TaxAgencies, and 5 Inventory Items. Intuit
-returned TaxRate `3` twice after the TaxCode create, so Rails now collapses identical duplicate IDs while rejecting
-conflicting duplicates.
-
-Two later user-initiated TaxCodes remain native sandbox data: ID `5` (`Test TAX`) and ID `6` (`Test TAX 2`).
-Their audit operations remain uncertain because the first readback became unavailable and the second Purchase
-request was returned by this US sandbox as a sales-rate code. The current dashboard count is eight TaxCodes.
-Rails now proves that the selected rate's TaxAgency supports the requested Sales/Purchase applicability before
-POST, and the form offers only compatible choices.
 
 ### Customers, vendors, sales, and payables
 
@@ -285,16 +267,6 @@ Each create is deliberately narrow: a unique Customer or Vendor list record, a o
 account-based Bill, one Payment applied to one open Invoice, or one check-style BillPayment applied to one open
 Bill. Amounts are decimal strings, dates are exact ISO 8601 values, and referenced records are re-queried before
 POST. All six use the same audit/idempotency/readback safety sequence.
-
-Controlled sandbox validation covered the complete lifecycle. Rails created Customer `58`, Vendor `59`,
-Invoice `147` for $2.00, Customer Payment `148`, Bill `149` for $1.00, and check-style BillPayment `150` from
-Checking. Every initial response was HTTP 201 after QuickBooks readback. The Invoice and Bill now have zero
-balance, and same-key replays for all six APIs returned HTTP 200 with `replayed: true` and their original local
-operation IDs without another QuickBooks write.
-
-A later stale browser confirmation attempted the same Customer with a new key. Rails found Customer `58` during
-its current-reference query, returned HTTP 422 before any Customer POST, and preserved rejected audit operation
-`24`. This left QuickBooks and the reconciled report values unchanged.
 
 ### Read-only financial statements
 
@@ -310,11 +282,8 @@ GET .../reports/trial_balance?start_date=2026-06-21&end_date=2026-07-21&accounti
 
 Profit & Loss, Cash Flow, General Ledger, and Trial Balance accept inclusive ISO periods of at most six calendar
 months. Balance Sheet accepts one `as_of_date`, which Rails sends to QuickBooks as `end_date`. Every report except
-Cash Flow accepts `Cash` or `Accrual`. Trial Balance and General Ledger both succeed in the connected sandbox.
-The General Ledger integration uses the sandbox-validated `reports/GeneralLedger` path. Its exact dashboard
-request returned Accrual data with 8 columns and 452 normalized rows before the six-record controlled lifecycle;
-that lifecycle added exactly eight accounting legs, producing 460 rows. The zero-opening Inventory Item added two
-native `Inventory Starting Value` rows with amount `.00`, producing 462 rows without changing any balance.
+Cash Flow accepts `Cash` or `Accrual`. The General Ledger integration uses the explicit
+`reports/GeneralLedger` path.
 
 Rails normalizes QuickBooks' recursive report envelope into ordered columns plus flattened `section`, `data`, and
 `summary` rows with their original nesting depth. Money cells remain validated decimal strings. The dashboard
@@ -375,11 +344,6 @@ outcome, including a rejection or uncertain result. These follow-up requests are
 the application never automatically retries a Journal Entry POST after an HTTP 401 or uncertain transport result.
 The durable key and audit state make that uncertainty visible without creating another record.
 
-The first explicitly approved controlled POST through this dashboard debited $1.00 to Office Expenses (Account
-`15`) and credited Supplies (Account `20`) on 2026-07-15. QuickBooks returned Journal Entry ID `146`; the
-application read it back, verified both lines and balance, and the independent list API found exactly one matching
-memo. This reclassified $1 between two Expense categories, so total expense and net profit were unchanged.
-
 The APIs are currently intended for this same-origin development dashboard. Rails CSRF protection applies to POST; production authentication is intentionally not invented for a local sandbox tool.
 
 ### API failures
@@ -419,11 +383,3 @@ ruby -e 'require "yaml"; puts YAML.safe_load_file("docs/openapi.yaml").fetch("op
 RUBOCOP_CACHE_ROOT=tmp/rubocop_cache RBENV_VERSION=3.4.6 rbenv exec ruby bin/rubocop
 RBENV_VERSION=3.4.6 rbenv exec bundle exec brakeman --no-pager
 ```
-
-## Safety note about the discarded demo Account
-
-The earlier, rejected implementation created one sandbox Account named `CFO Bridge Demo Operating Expense` with QuickBooks ID `1150040000`. The simplified dashboard excludes it from both dropdowns and server-side POST validation. It is not used by this workflow.
-
-It has not been deactivated automatically because that changes external QuickBooks data. If you want it removed
-from the active chart, explicitly request deactivation of that exact sandbox Account; no other Account should be
-touched.

@@ -62,8 +62,8 @@ paths:
       operationId: listEligibleAccounts
       summary: List eligible QuickBooks Accounts
       description: |
-        Returns active Accounts that may be selected for the simple Journal Entry flow. Accounts Receivable,
-        Accounts Payable, and the discarded demo Account are excluded.
+        Returns active Accounts that may be selected for the simple Journal Entry flow. Accounts Receivable
+        and Accounts Payable are excluded.
       tags: [Accounts]
       parameters:
         - $ref: '#/components/parameters/ConnectionId'
@@ -339,15 +339,15 @@ paths:
                 journal_entry_operations:
                   - id: 1
                     status: succeeded
-                    txn_date: '2026-07-15'
-                    memo: CFO Bridge controlled sandbox validation 2026-07-15
-                    amount: '1.00'
-                    debit_account_id: '15'
-                    credit_account_id: '20'
-                    quickbooks_journal_entry_id: '146'
+                    txn_date: '2026-01-15'
+                    memo: Quarter-end adjustment
+                    amount: '25.00'
+                    debit_account_id: '1001'
+                    credit_account_id: '1002'
+                    quickbooks_journal_entry_id: '12345'
                     error_code: null
-                    created_at: '2026-07-15T15:18:00.000+05:30'
-                    completed_at: '2026-07-15T15:18:00.000+05:30'
+                    created_at: '2026-01-15T15:18:00.000+05:30'
+                    completed_at: '2026-01-15T15:18:00.000+05:30'
                 pagination:
                   page: 1
                   per_page: 50
