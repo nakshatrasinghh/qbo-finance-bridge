@@ -1,0 +1,11 @@
+ENV["RAILS_ENV"] ||= "test"
+ENV["QUICKBOOKS_ENV"] = "sandbox"
+ENV["QUICKBOOKS_CLIENT_ID"] = "test-client-id"
+ENV["QUICKBOOKS_CLIENT_SECRET"] = "test-client-secret"
+ENV["QUICKBOOKS_REDIRECT_URI"] = "https://example.test/quickbooks/connections/callback"
+ENV["ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY"] = "test-primary-key-000000000000000"
+ENV["ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY"] = "test-deterministic-key-000000000"
+ENV["ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT"] = "test-key-derivation-salt-0000000"
+
+require_relative "../config/environment"
+require "rails/test_help"

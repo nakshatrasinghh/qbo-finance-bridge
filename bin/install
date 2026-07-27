@@ -1,6 +1,5 @@
 #!/usr/bin/env ruby
 
-require "io/console"
 require "pathname"
 require "rbconfig"
 require "securerandom"
@@ -99,6 +98,7 @@ def load_encryption_support!
   ENV["BUNDLE_GEMFILE"] = ROOT.join("Gemfile").to_s
   require "bundler/setup"
   require "active_support/encrypted_file"
+  require "io/console"
 end
 
 def encrypted_credentials

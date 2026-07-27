@@ -3,6 +3,8 @@
 CI.run do
   step "Setup", "bin/setup --skip-server"
 
+  step "Tests", "bin/rails test"
+
   step "Style: Ruby formatting", "bin/format check"
   step "Style: Ruby", "bin/rubocop"
 

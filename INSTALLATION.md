@@ -6,7 +6,7 @@ interactive `bin/install` command; manual commands are included only as a fallba
 ## What each developer needs
 
 - Git
-- Ruby 3.4.6
+- Ruby 3.4.10
 - PostgreSQL 16
 - An Intuit Developer account
 - A QuickBooks Online sandbox company
@@ -15,7 +15,7 @@ Node.js, npm, Yarn, and a separate frontend process are not required.
 
 Ruby and Bundler have different version numbers:
 
-- `3.4.6` is the Ruby version, declared in `.ruby-version`.
+- `3.4.10` is the Ruby version, declared in `.ruby-version`.
 - Bundler is the Ruby dependency installer. Its compatible version is recorded in `Gemfile.lock`.
 
 Developers do not need to select or type a Bundler version. `bin/install` reads the lockfile and installs the
@@ -28,14 +28,14 @@ One macOS setup option is:
 ```bash
 brew install rbenv ruby-build postgresql@16
 rbenv init
-rbenv install -s 3.4.6
+rbenv install -s 3.4.10
 brew services start postgresql@16
 ```
 
 Follow the instruction printed by `rbenv init` if shell configuration is required, then restart the terminal.
 
 Linux developers can use rbenv, asdf, mise, or their distribution's packages. Windows developers should use a
-Ruby 3.4.6 environment that can run the repository's Bash and Ruby executables, such as WSL 2.
+Ruby 3.4.10 environment that can run the repository's Bash and Ruby executables, such as WSL 2.
 
 ## 2. Create an Intuit app and sandbox
 
@@ -63,8 +63,8 @@ cd qbo-finance-bridge
 ruby --version
 ```
 
-Ruby `3.4.6` is required. If the last command reports another version and rbenv is installed, `bin/install`
-automatically relaunches itself with Ruby 3.4.6. With another Ruby manager, activate 3.4.6 before continuing.
+Ruby `3.4.10` is required. If the last command reports another version and rbenv is installed, `bin/install`
+automatically relaunches itself with Ruby 3.4.10. With another Ruby manager, activate 3.4.10 before continuing.
 
 ## 4. Run the installer
 
@@ -74,7 +74,7 @@ bin/install
 
 The installer performs these steps:
 
-1. uses Ruby 3.4.6, automatically through rbenv when available, and rejects other Ruby versions;
+1. uses Ruby 3.4.10, automatically through rbenv when available, and rejects other Ruby versions;
 2. installs the Bundler version required by `Gemfile.lock` when necessary;
 3. installs the project gems;
 4. reuses a valid local credentials/master-key pair, or asks for the developer's Intuit Development Client ID
@@ -133,13 +133,16 @@ configuration without changing QuickBooks:
 bin/install --check
 ```
 
-Run the repository quality and security checks:
+Run the complete local pipeline. It prepares the databases, runs the Rails tests, checks formatting and style,
+and performs both dependency and static security audits:
 
 ```bash
-bin/format check
-RUBOCOP_CACHE_ROOT=tmp/rubocop_cache bin/rubocop
-bundle exec brakeman --no-pager
-bundle exec bundler-audit check
+bin/ci
+```
+
+Run the remaining boot and loading check:
+
+```bash
 bin/rails zeitwerk:check
 ```
 
@@ -216,7 +219,7 @@ that may be copied, uploaded, or shared.
 ## Common setup failures
 
 - **Wrong Ruby version:** enter the repository through the configured Ruby manager and confirm `ruby --version`
-  reports 3.4.6.
+  reports 3.4.10.
 - **Intuit redirect mismatch:** the Development redirect URI and Rails configuration must both be exactly
   `http://localhost:3000/quickbooks/connections/callback`.
 - **Credentials cannot be decrypted:** the credentials file and master key do not match. Restore the developer's

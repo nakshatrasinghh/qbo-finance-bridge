@@ -6,6 +6,48 @@ on:
     branches: [ main ]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: qbo_finance_bridge_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY: test-deterministic-key-000000000
+      ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT: test-key-derivation-salt-0000000
+      ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY: test-primary-key-000000000000000
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/qbo_finance_bridge_test
+      QUICKBOOKS_CLIENT_ID: test-client-id
+      QUICKBOOKS_CLIENT_SECRET: test-client-secret
+      QUICKBOOKS_ENV: sandbox
+      QUICKBOOKS_REDIRECT_URI: https://example.test/quickbooks/connections/callback
+      RAILS_ENV: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Prepare test database
+        run: bin/rails db:prepare
+
+      - name: Run Rails tests
+        run: bin/rails test
+
   scan_ruby:
     runs-on: ubuntu-latest
 

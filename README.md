@@ -166,7 +166,7 @@ Rails sends two lines with the same amount, so debit equals credit. Accounts Rec
 
 ## Runtime
 
-- Ruby 3.4.6
+- Ruby 3.4.10
 - Rails 8.1.3
 - PostgreSQL 16
 - Faraday 2.14.3
@@ -177,7 +177,7 @@ Follow [`INSTALLATION.md`](INSTALLATION.md) to install Ruby and PostgreSQL, crea
 credentials, configure an Intuit sandbox app, prepare the databases, connect QuickBooks, and validate the
 checkout.
 
-After installing Ruby 3.4.6 and PostgreSQL 16, the primary setup command is:
+After installing Ruby 3.4.10 and PostgreSQL 16, the primary setup command is:
 
 ```bash
 bin/install
@@ -368,19 +368,20 @@ displays HTTP failures inside the expanded operation as usual.
 ## Local validation commands
 
 ```bash
-RBENV_VERSION=3.4.6 rbenv exec bundle check
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/format write
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/format check
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/rails db:prepare
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/rails db:migrate:status
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/rails routes -g quickbooks
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/rails routes -g api-docs
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/rails zeitwerk:check
-RBENV_VERSION=3.4.6 rbenv exec ruby bin/rails runner 'puts "Rails booted successfully"'
+RBENV_VERSION=3.4.10 rbenv exec bundle check
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/format write
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/format check
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails db:prepare
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails test
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails db:migrate:status
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails routes -g quickbooks
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails routes -g api-docs
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails zeitwerk:check
+RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails runner 'puts "Rails booted successfully"'
 node --check app/assets/javascripts/financial_records.js
 node --check app/assets/javascripts/operational_capabilities.js
 node --check app/assets/javascripts/accounting_transactions.js
 ruby -e 'require "yaml"; puts YAML.safe_load_file("docs/openapi.yaml").fetch("openapi")'
-RUBOCOP_CACHE_ROOT=tmp/rubocop_cache RBENV_VERSION=3.4.6 rbenv exec ruby bin/rubocop
-RBENV_VERSION=3.4.6 rbenv exec bundle exec brakeman --no-pager
+RUBOCOP_CACHE_ROOT=tmp/rubocop_cache RBENV_VERSION=3.4.10 rbenv exec ruby bin/rubocop
+RBENV_VERSION=3.4.10 rbenv exec bundle exec brakeman --no-pager
 ```
