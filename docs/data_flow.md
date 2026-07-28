@@ -1,5 +1,9 @@
 # Data flow
 
+For the entities participating in these flows, see
+[`quickbooks_data_model.md`](quickbooks_data_model.md). Component ownership is documented in
+[`architecture.md`](architecture.md).
+
 ## Open the financial records dashboard
 
 ```mermaid

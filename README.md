@@ -124,8 +124,14 @@ question-specific aggregates such as overdue balance by customer, maintain a ful
 consume CDC/webhooks, perform currency conversion, or create embeddings. Many entity catalogs are also bounded
 at 1,000 records; Accounts and Journal Entries have explicit multi-page handling.
 
-Implementation details and sequence diagrams are in
-[`docs/architecture.md`](docs/architecture.md) and [`docs/data_flow.md`](docs/data_flow.md).
+Repository documentation:
+
+- [`docs/quickbooks_data_model.md`](docs/quickbooks_data_model.md): QuickBooks entities and their accounting
+  relationships.
+- [`docs/quickbooks_data_normalization.md`](docs/quickbooks_data_normalization.md): the ten transformations from
+  vendor-specific QuickBooks JSON to the stable Rails contract.
+- [`docs/architecture.md`](docs/architecture.md): Rails components and responsibilities.
+- [`docs/data_flow.md`](docs/data_flow.md): runtime request and processing sequences.
 
 The three connection-owned HTML routes are frontend shells only. Browser JavaScript calls the JSON APIs after
 load; ERB rendering never exchanges finance data with QuickBooks.

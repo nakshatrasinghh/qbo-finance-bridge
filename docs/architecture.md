@@ -1,5 +1,10 @@
 # Architecture
 
+For the accounting entities behind these components, see
+[`quickbooks_data_model.md`](quickbooks_data_model.md). The upstream-to-application data contract is documented
+in [`quickbooks_data_normalization.md`](quickbooks_data_normalization.md), and runtime request sequences are
+documented in [`data_flow.md`](data_flow.md).
+
 This is a small Rails monolith. Rails serves three HTML/vanilla-JavaScript dashboards, exposes twenty-nine finance JSON
 operations, stores the encrypted QuickBooks connection and audited create operations, and calls the QuickBooks
 Online sandbox REST API. There is no separate frontend project/process or generic integration framework.
