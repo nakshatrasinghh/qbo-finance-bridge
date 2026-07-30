@@ -24,23 +24,35 @@ application dependencies.
 
 ## 2. Configure the Intuit sandbox application
 
-In the Intuit developer portal:
+`bin/install` does not sign in to Intuit or retrieve developer credentials. Complete the portal setup first:
 
-1. select the application's development/sandbox credentials;
-2. enable the QuickBooks Accounting scope;
-3. register this exact local redirect URI:
+1. Sign in to the [Intuit Developer Portal](https://developer.intuit.com/).
+2. Select **My Hub → App dashboard**, then create or open the application.
+3. Ensure the application has the **Accounting** permission.
+4. Select **Keys and credentials → Development**, enable **Show credentials**, and copy the Client ID and Client
+   Secret.
+5. Select **Settings → Redirect URIs → Development → Add URI**.
+6. Register this exact local redirect URI and save the change:
 
 ```text
 http://localhost:3000/quickbooks/connections/callback
 ```
 
-Production QuickBooks configuration fails closed; use development credentials for a sandbox company.
+The registered URI must match exactly, including its `http` scheme, `localhost` host, casing, path, and absence of
+a trailing slash. Intuit permits HTTP localhost callbacks for sandbox development; production redirect URIs
+require HTTPS. See Intuit's current guides for
+[app credentials](https://developer.intuit.com/app/developer/qbo/docs/get-started/build-your-first-app),
+[redirect URIs](https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/set-redirect-uri),
+and [sandbox companies](https://developer.intuit.com/app/developer/qbo/docs/develop/sandboxes/manage-your-sandboxes).
+
+Use only the Development Client ID and Client Secret with a sandbox company. Production QuickBooks configuration
+fails closed.
 
 ## 3. Choose a credentials source
 
 The recommended local workflow uses ignored encrypted Rails credentials. In the next step, `bin/install` reuses
-an existing credentials/master-key pair or prompts for the Intuit development Client ID and Client Secret before
-creating one with this structure:
+an existing credentials/master-key pair or prompts for the Intuit Development Client ID and Client Secret copied
+from the portal before creating one with this structure:
 
 ```yaml
 secret_key_base: ...
@@ -72,8 +84,9 @@ bin/install
 ```
 
 The installer selects the Bundler version from `Gemfile.lock`, installs missing gems, creates ignored encrypted
-credentials when needed, validates the sandbox configuration, and runs `bin/setup --skip-server`. It never
-creates, prepares, migrates, or connects to a database.
+credentials when needed, validates the local sandbox configuration, and runs `bin/setup --skip-server`. It does
+not retrieve credentials, verify them with Intuit, or start OAuth. It never creates, prepares, migrates, or
+connects to a database.
 
 If all QuickBooks settings are supplied through environment variables, prepare the application without creating
 local encrypted credentials:
@@ -168,8 +181,10 @@ bin/rails routes
 node --check app/assets/javascripts/api_docs.js
 ```
 
-`bin/install --check` validates the ignored encrypted credentials/master-key pair. Skip that command when the
-application is configured only through environment variables.
+`bin/install --check` validates the ignored encrypted credentials/master-key pair and local configuration only.
+It does not contact Intuit or prove that the Client ID, Client Secret, Accounting permission, or redirect URI was
+saved correctly in the portal. Skip that command when the application is configured only through environment
+variables.
 
 ## Troubleshooting
 

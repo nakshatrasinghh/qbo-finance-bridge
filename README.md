@@ -107,12 +107,17 @@ POST creates a real record in the connected QuickBooks sandbox. Repeating Execut
 
 - Ruby 3.4.10
 - Bundler 2.7.2
-- Rails 8.1.3
+- Rails 8.1.3.1
 - one Intuit developer sandbox application
 
 PostgreSQL, SQLite, Redis, and another persistence service are not required.
 
-Follow [INSTALLATION.md](INSTALLATION.md). The recommended first-time setup is:
+Follow [INSTALLATION.md](INSTALLATION.md) to enable the Accounting permission, copy the application's Development
+Client ID and Client Secret, and register the exact local callback URI in the Intuit Developer Portal.
+`bin/install` does not retrieve or remotely validate those values; it prompts for them and stores them in ignored
+encrypted Rails credentials.
+
+The recommended first-time local setup is:
 
 ```bash
 bin/install
