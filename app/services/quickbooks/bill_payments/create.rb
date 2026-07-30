@@ -9,7 +9,6 @@ module Quickbooks
         bank_account_id: nil,
         txn_date: nil,
         amount: nil,
-        request_id:,
         client: nil
       )
         @connection = connection
@@ -17,18 +16,15 @@ module Quickbooks
         @bank_account_id = bank_account_id.to_s
         @txn_date_input = txn_date.to_s
         @amount_input = amount.to_s.strip
-        @request_id = request_id
-        @client = client || Client.new(connection: connection)
-        @post_attempted = false
+        @client = client || Client.new(connection:)
       end
 
       def call
         validate_input!
         load_references!
 
-        @post_attempted = true
-        response = client.post("billpayment", json: payload, params: { requestid: request_id })
-        @quickbooks_entity_id = response.dig("BillPayment", "Id").to_s
+        response = client.post("billpayment", json: payload)
+        quickbooks_entity_id = response.dig("BillPayment", "Id").to_s
         if quickbooks_entity_id.blank?
           raise_unexpected!("QuickBooks did not return the created BillPayment ID.")
         end
@@ -36,26 +32,13 @@ module Quickbooks
         readback(quickbooks_entity_id)
       end
 
-      attr_reader :quickbooks_entity_id
-
-      def post_attempted?
-        @post_attempted
-      end
-
       private
 
-      attr_reader :amount,
-                  :bank_account_id,
-                  :bill,
-                  :bill_id,
-                  :client,
-                  :connection,
-                  :request_id,
-                  :txn_date
+      attr_reader :amount, :bank_account_id, :bill, :bill_id, :client, :connection, :txn_date
 
       def validate_input!
         [bill_id, bank_account_id].each do |id|
-          unless id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT)
+          unless EntityId.valid?(id)
             raise_input!("Choose a valid open QuickBooks Bill and bank Account.")
           end
         end
@@ -75,7 +58,7 @@ module Quickbooks
       end
 
       def load_references!
-        catalog = Query.new(connection: connection, client: client).call
+        catalog = Query.new(connection:, client:).call
         @bill = catalog.open_bills.find { |candidate| candidate.id == bill_id }
         bank_valid = catalog.bank_accounts.any? { |account| account.id == bank_account_id }
         unless bill && bank_valid

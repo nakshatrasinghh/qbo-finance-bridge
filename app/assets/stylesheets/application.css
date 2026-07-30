@@ -169,24 +169,6 @@ th {
   font-weight: 650;
 }
 
-.audit-status {
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.audit-status-succeeded {
-  color: #176b3a;
-}
-
-.audit-status-pending,
-.audit-status-uncertain {
-  color: #8a4b08;
-}
-
-.audit-status-rejected {
-  color: #9b1c1c;
-}
-
 [role="alert"] {
   color: #9b1c1c;
 }

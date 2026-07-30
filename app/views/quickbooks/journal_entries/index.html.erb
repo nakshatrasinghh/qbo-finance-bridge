@@ -4,28 +4,32 @@
 <% end %>
 
 <main data-financial-records-dashboard
-      data-accounts-url="<%= api_v1_quickbooks_connection_accounts_path(@connection) %>"
-      data-journal-entries-url="<%= api_v1_quickbooks_connection_journal_entries_path(@connection) %>"
-      data-audit-history-url="<%= api_v1_quickbooks_connection_journal_entry_operations_path(@connection) %>"
-      data-profit-and-loss-url="<%= api_v1_quickbooks_connection_profit_and_loss_report_path(@connection) %>"
-      data-balance-sheet-url="<%= api_v1_quickbooks_connection_balance_sheet_report_path(@connection) %>"
-      data-cash-flow-url="<%= api_v1_quickbooks_connection_cash_flow_report_path(@connection) %>"
-      data-general-ledger-url="<%= api_v1_quickbooks_connection_general_ledger_report_path(@connection) %>"
-      data-trial-balance-url="<%= api_v1_quickbooks_connection_trial_balance_report_path(@connection) %>">
+      data-accounts-url="<%= api_v1_quickbooks_connection_accounts_path(@connection.id) %>"
+      data-journal-entries-url="<%= api_v1_quickbooks_connection_journal_entries_path(@connection.id) %>"
+      data-profit-and-loss-url="<%= api_v1_quickbooks_connection_profit_and_loss_report_path(@connection.id) %>"
+      data-balance-sheet-url="<%= api_v1_quickbooks_connection_balance_sheet_report_path(@connection.id) %>"
+      data-cash-flow-url="<%= api_v1_quickbooks_connection_cash_flow_report_path(@connection.id) %>"
+      data-general-ledger-url="<%= api_v1_quickbooks_connection_general_ledger_report_path(@connection.id) %>"
+      data-trial-balance-url="<%= api_v1_quickbooks_connection_trial_balance_report_path(@connection.id) %>">
   <p>
-    <%= link_to "Company connection", quickbooks_connection_path(@connection) %>
+    <%= link_to "Company connection", quickbooks_connection_path(@connection.id) %>
     ·
-    <%= link_to "Sales and payables dashboard", quickbooks_connection_transactions_path(@connection) %>
+    <%= link_to "Sales and payables dashboard", quickbooks_connection_transactions_path(@connection.id) %>
     ·
-    <%= link_to "Workforce, tax, and inventory", quickbooks_connection_operations_path(@connection) %>
+    <%= link_to "Workforce, tax, and inventory", quickbooks_connection_operations_path(@connection.id) %>
     ·
     <%= link_to "API documentation", api_docs_path %>
   </p>
   <h1>QuickBooks financial records API dashboard</h1>
   <p>
-    Read QuickBooks-generated financial statements, create one controlled balanced Journal Entry, inspect
-    existing Journal Entries, and review local submission history. All dashboard data is loaded from Rails JSON
-    APIs connected only to the QuickBooks sandbox.
+    Read QuickBooks-generated financial statements, create one controlled balanced Journal Entry, and inspect
+    existing Journal Entries. All dashboard data is loaded from Rails JSON APIs connected only to the QuickBooks
+    sandbox.
+  </p>
+  <p class="danger-note">
+    This is a single-process, sandbox-only local demo. POST creates a real sandbox record, and repeated POSTs may
+    create duplicate records. Restarting Rails—or a development reload—can discard the process-local connection
+    and require reconnecting. Multiple Puma workers and production use are unsupported.
   </p>
 
   <div id="api-alert" class="api-alert" role="alert" hidden>
@@ -142,7 +146,7 @@
       need additional customer/vendor data.
     </p>
 
-    <%= form_with url: api_v1_quickbooks_connection_journal_entries_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_journal_entries_path(@connection.id),
                   scope: :journal_entry,
                   method: :post,
                   data: { journal_entry_form: true } do |form| %>
@@ -178,9 +182,9 @@
   <section aria-labelledby="filters-heading">
     <h2 id="filters-heading">Filter and export read-only data</h2>
     <p>
-      Entry dates are sent to both read-only GET APIs so older matching pages can be loaded. Memo and audit status
-      are applied in this browser to the pages loaded so far. CSV downloads contain only visible loaded data,
-      with each Journal Entry line exported as its own CSV row.
+      Entry dates are sent to the Journal Entries GET API so older matching pages can be loaded. Memo is applied
+      in this browser to the pages loaded so far. CSV downloads contain only visible loaded data, with each
+      Journal Entry line exported as its own CSV row.
     </p>
     <form class="filter-panel" data-finance-filter-form>
       <div class="filter-grid">
@@ -196,16 +200,6 @@
           <label for="filter-memo">Memo contains</label><br>
           <input id="filter-memo" type="search" maxlength="500" placeholder="Search memo" data-filter-memo>
         </p>
-        <p>
-          <label for="filter-audit-status">Audit status</label><br>
-          <select id="filter-audit-status" data-filter-audit-status>
-            <option value="">All statuses</option>
-            <option value="pending">Pending</option>
-            <option value="succeeded">Succeeded</option>
-            <option value="rejected">Rejected</option>
-            <option value="uncertain">Uncertain</option>
-          </select>
-        </p>
       </div>
       <div class="filter-actions">
         <button type="submit">Apply filters</button>
@@ -213,43 +207,8 @@
         <button type="button" class="secondary-action" data-export-journal-entries disabled>
           Download visible Journal Entries CSV
         </button>
-        <button type="button" class="secondary-action" data-export-audit-history disabled>
-          Download visible audit CSV
-        </button>
       </div>
     </form>
-  </section>
-
-  <section aria-labelledby="audit-heading">
-    <h2 id="audit-heading">GET submission audit history</h2>
-    <p>
-      This read-only API shows paginated local Journal Entry submission operations. It reads PostgreSQL only and
-      does not call or modify QuickBooks.
-    </p>
-    <p id="audit-summary">Waiting for the audit history API…</p>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th scope="col">Submitted</th>
-            <th scope="col">Status</th>
-            <th scope="col">Entry date</th>
-            <th scope="col">Memo</th>
-            <th scope="col">Amount</th>
-            <th scope="col">Accounts</th>
-            <th scope="col">QuickBooks ID</th>
-          </tr>
-        </thead>
-        <tbody id="audit-operation-rows">
-          <tr><td colspan="7">Loading through GET API…</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="pagination-actions">
-      <button type="button" class="secondary-action" data-load-more-audit hidden>
-        Load more audit operations
-      </button>
-    </p>
   </section>
 
   <section aria-labelledby="records-heading">

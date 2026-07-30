@@ -3,30 +3,20 @@ module Quickbooks
     class Create
       MONEY_PATTERN = /\A\d{1,11}(?:\.\d{1,2})?\z/
 
-      def initialize(
-        connection:,
-        invoice_id: nil,
-        txn_date: nil,
-        amount: nil,
-        request_id:,
-        client: nil
-      )
+      def initialize(connection:, invoice_id: nil, txn_date: nil, amount: nil, client: nil)
         @connection = connection
         @invoice_id = invoice_id.to_s
         @txn_date_input = txn_date.to_s
         @amount_input = amount.to_s.strip
-        @request_id = request_id
-        @client = client || Client.new(connection: connection)
-        @post_attempted = false
+        @client = client || Client.new(connection:)
       end
 
       def call
         validate_input!
         load_open_invoice!
 
-        @post_attempted = true
-        response = client.post("payment", json: payload, params: { requestid: request_id })
-        @quickbooks_entity_id = response.dig("Payment", "Id").to_s
+        response = client.post("payment", json: payload)
+        quickbooks_entity_id = response.dig("Payment", "Id").to_s
         if quickbooks_entity_id.blank?
           raise_unexpected!("QuickBooks did not return the created Payment ID.")
         end
@@ -34,20 +24,12 @@ module Quickbooks
         readback(quickbooks_entity_id)
       end
 
-      attr_reader :quickbooks_entity_id
-
-      def post_attempted?
-        @post_attempted
-      end
-
       private
 
-      attr_reader :amount, :client, :connection, :invoice, :invoice_id, :request_id, :txn_date
+      attr_reader :amount, :client, :connection, :invoice, :invoice_id, :txn_date
 
       def validate_input!
-        unless invoice_id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT)
-          raise_input!("Choose a valid open QuickBooks Invoice.")
-        end
+        raise_input!("Choose a valid open QuickBooks Invoice.") unless EntityId.valid?(invoice_id)
 
         @txn_date = Date.iso8601(@txn_date_input)
         unless txn_date.iso8601 == @txn_date_input
@@ -66,7 +48,7 @@ module Quickbooks
       def load_open_invoice!
         @invoice =
           Invoices::RecordsQuery
-            .new(connection: connection, client: client)
+            .new(connection:, client:)
             .call
             .find { |candidate| candidate.id == invoice_id }
         raise_input!("The selected Invoice is not available in QuickBooks.") unless invoice

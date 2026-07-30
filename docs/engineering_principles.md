@@ -1,27 +1,55 @@
 # Engineering principles
 
-- Rails conventions first
-- Pragmatic monolith
-- Explicit domain language
-- Few dependencies
-- Rails built-ins preferred
-- No speculative abstraction
-- No external API calls from models or callbacks
-- No database transaction held open across an external HTTP request
-- Database constraints for critical integrity
-- QuickBooks writes are explicit
-- Idempotency is mandatory
-- OAuth secrets are encrypted and redacted
-- External API hosts are allowlisted in code, not supplied by request data
-- Rotated OAuth tokens replace older persisted values; stale responses must not overwrite newer rotations
-- Upstream request/response bodies are not normal application logs
-- Controllers coordinate HTTP concerns only
-- Business and accounting rules remain outside controllers
-- Payload builders remain pure
-- Infrastructure code does not contain accounting policy
-- Scale considerations are introduced when a real flow requires them
-- Documentation explains both adopted and rejected patterns
-- Packwerk, engines, and microservices are deferred until justified
+## Obvious Rails request flow
 
-These are durable project rules. Implementation details belong in the architecture, data-flow, and API
-documentation.
+Prefer conventional controllers and explicit domain objects:
+
+```text
+route -> controller -> entity Submit -> entity Create -> Quickbooks::Client -> readback -> serializer
+```
+
+Controllers own HTTP concerns. Entity objects own accounting rules and payload verification. The QuickBooks
+client owns transport. The process store owns connection lifecycle and synchronization.
+
+## Deliberate Ruby
+
+- Use intention-revealing domain names.
+- Use keyword arguments at multi-value boundaries and keyword/hash shorthand where supported.
+- Do not rebind a value to itself or create a same-value local alias merely to rename it.
+- Avoid parameter/local shadowing.
+- Prefer guard clauses and small cohesive methods.
+- Do not add `ApplicationService`, generic repositories, result monads, dynamic dispatch, or metaprogramming to
+  compress eleven explicit entity flows.
+- Use `Time.current`, strict ISO 8601 date parsing, `BigDecimal`, and `SecureRandom.uuid`.
+- Use `Hash#fetch` for required internal keys and bounded allowlists for untrusted input.
+
+## Security
+
+- Keep OAuth access/refresh tokens and Intuit client secrets in server memory or encrypted credentials only.
+- Never log, inspect, serialize, render, or return tokens or Authorization headers.
+- Keep only the opaque connection UUID in the Rails session after OAuth.
+- Preserve OAuth state validation, CSRF, TLS verification, parameter filtering, and revocation.
+- Fix QuickBooks hosts server-side and reject production configuration.
+
+## Concurrency
+
+MemoryStore's individual operations are thread-safe; refresh and disconnect are compound operations and must use
+the same per-connection lock. Re-fetch and re-check after acquiring the lock. Replace immutable connection
+values; never mutate token fields in place.
+
+Do not hold a database transaction—or any broad global lock—across an external HTTP call.
+
+## Writes
+
+- Each POST is one deliberate sandbox operation.
+- Generate QBO `requestid` inside the outbound client, never from caller input.
+- Never automatically retry an ambiguous POST.
+- Perform current-reference/accounting validation and verify a QuickBooks readback.
+- Do not maintain local idempotency, replay, audit, submission state, or create-time duplicate-name checks.
+- Make no unsupported claim about an ambiguous result.
+
+## Scope
+
+This is a database-free, single-process sandbox demonstration. Prefer the smallest coherent implementation.
+Production persistence, worker coordination, background jobs, modular packaging, or another integration layer
+would require a separate architecture and security review.

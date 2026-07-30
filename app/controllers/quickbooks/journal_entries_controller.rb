@@ -1,7 +1,8 @@
 module Quickbooks
   class JournalEntriesController < BaseController
+    include ConnectionScoped
+
     def index
-      @connection = QuickbooksConnection.find(params[:connection_id])
     end
   end
 end

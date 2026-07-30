@@ -162,12 +162,6 @@ GEM
     parser (3.3.11.1)
       ast (~> 2.4.1)
       racc
-    pg (1.6.3)
-    pg (1.6.3-aarch64-linux)
-    pg (1.6.3-aarch64-linux-musl)
-    pg (1.6.3-arm64-darwin)
-    pg (1.6.3-x86_64-linux)
-    pg (1.6.3-x86_64-linux-musl)
     pp (0.6.4)
       prettyprint
     prettier_print (1.2.1)
@@ -306,7 +300,6 @@ DEPENDENCIES
   bundler-audit
   debug
   faraday (~> 2.14)
-  pg (~> 1.1)
   propshaft
   puma (>= 5.0)
   rails (~> 8.1.3)

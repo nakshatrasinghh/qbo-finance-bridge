@@ -5,10 +5,9 @@ class RuntimeCompatibilityTest < ActiveSupport::TestCase
     assert_equal Rails.root.join(".ruby-version").read.strip, RUBY_VERSION
   end
 
-  test "connects to PostgreSQL" do
-    result = ActiveRecord::Base.connection.select_value("SELECT 1")
-
-    assert_equal 1, result.to_i
+  test "boots without Active Record or database configuration" do
+    assert_nil defined?(ActiveRecord::Base)
+    refute Rails.root.join("config/database.yml").exist?
   end
 
   test "validates sandbox QuickBooks configuration without an external request" do

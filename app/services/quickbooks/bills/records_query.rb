@@ -4,7 +4,7 @@ module Quickbooks
       MAX_RESULTS = 1_000
 
       def initialize(connection:, client: nil)
-        @client = client || Client.new(connection: connection)
+        @client = client || Client.new(connection:)
       end
 
       def call
@@ -23,10 +23,10 @@ module Quickbooks
 
             bill = Details.from_payload(payload)
             valid =
-              bill.id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT) &&
-                valid_date?(bill.txn_date) && valid_date?(bill.due_date) &&
-                bill.vendor_id.present? && bill.payable_account_id.present? && bill.total_amount &&
-                bill.balance && bill.lines.all? { |line| valid_line?(line) }
+              EntityId.valid?(bill.id) && valid_date?(bill.txn_date) &&
+                valid_date?(bill.due_date) && bill.vendor_id.present? &&
+                bill.payable_account_id.present? && bill.total_amount && bill.balance &&
+                bill.lines.all? { |line| valid_line?(line) }
             raise_unexpected! unless valid
 
             bill
@@ -47,7 +47,7 @@ module Quickbooks
       end
 
       def valid_line?(line)
-        line.amount && line.account_id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT)
+        line.amount && EntityId.valid?(line.account_id)
       end
 
       def raise_unexpected!

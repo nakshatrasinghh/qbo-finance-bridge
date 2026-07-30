@@ -11,7 +11,6 @@ module Quickbooks
         due_date: nil,
         amount: nil,
         description: nil,
-        request_id:,
         client: nil
       )
         @connection = connection
@@ -21,29 +20,20 @@ module Quickbooks
         @due_date_input = due_date.to_s
         @amount_input = amount.to_s.strip
         @description = description.to_s.strip
-        @request_id = request_id
-        @client = client || Client.new(connection: connection)
-        @post_attempted = false
+        @client = client || Client.new(connection:)
       end
 
       def call
         validate_input!
         validate_references!
 
-        @post_attempted = true
-        response = client.post("invoice", json: payload, params: { requestid: request_id })
-        @quickbooks_entity_id = response.dig("Invoice", "Id").to_s
+        response = client.post("invoice", json: payload)
+        quickbooks_entity_id = response.dig("Invoice", "Id").to_s
         if quickbooks_entity_id.blank?
           raise_unexpected!("QuickBooks did not return the created Invoice ID.")
         end
 
         readback(quickbooks_entity_id)
-      end
-
-      attr_reader :quickbooks_entity_id
-
-      def post_attempted?
-        @post_attempted
       end
 
       private
@@ -55,12 +45,11 @@ module Quickbooks
                   :description,
                   :due_date,
                   :item_id,
-                  :request_id,
                   :txn_date
 
       def validate_input!
         [customer_id, item_id].each do |id|
-          unless id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT)
+          unless EntityId.valid?(id)
             raise_input!("Choose a valid QuickBooks Customer and sales Item.")
           end
         end
@@ -90,14 +79,11 @@ module Quickbooks
       def validate_references!
         customer_valid =
           Customers::Query
-            .new(connection: connection, client: client)
+            .new(connection:, client:)
             .call
             .any? { |customer| customer.id == customer_id }
         item_valid =
-          Items::SalesChoices
-            .new(connection: connection, client: client)
-            .call
-            .any? { |item| item.id == item_id }
+          Items::SalesChoices.new(connection:, client:).call.any? { |item| item.id == item_id }
         unless customer_valid && item_valid
           raise_input!("The selected Customer or sales Item is not currently active in QuickBooks.")
         end

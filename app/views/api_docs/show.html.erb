@@ -10,10 +10,19 @@
     <p><%= link_to "QuickBooks connections", quickbooks_connections_path %></p>
     <h1>QuickBooks API documentation</h1>
     <p>
-      This OpenAPI contract covers twenty-nine finance data operations and the application health API. Interactive
-      requests are limited to GET. All eleven create operations are documented but cannot be executed here.
+      This OpenAPI contract covers twenty-eight finance operations and the application health API. Swagger sends
+      GET and POST requests to Rails through the current browser session; it never calls QuickBooks directly and
+      never receives a QuickBooks bearer token.
     </p>
+    <div class="danger-note">
+      <strong>Sandbox-only local demo.</strong>
+      POST creates a real record in the connected QuickBooks sandbox. Repeated executions may create duplicate
+      records. The connection exists only in this Rails process and disappears after a restart or may disappear
+      after a development reload; reconnect before continuing. Multiple Puma workers and production use are not
+      supported.
+    </div>
     <p><%= link_to "Open the raw OpenAPI YAML", api_docs_openapi_path %></p>
+    <p class="api-alert" data-swagger-local-error role="alert" hidden></p>
   </div>
 
   <noscript>

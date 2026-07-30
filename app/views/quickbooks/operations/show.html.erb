@@ -4,16 +4,16 @@
 <% end %>
 
 <main data-operational-capabilities
-      data-employees-url="<%= api_v1_quickbooks_connection_employees_path(@connection) %>"
-      data-time-activities-url="<%= api_v1_quickbooks_connection_time_activities_path(@connection) %>"
-      data-tax-codes-url="<%= api_v1_quickbooks_connection_tax_codes_path(@connection) %>"
-      data-inventory-items-url="<%= api_v1_quickbooks_connection_inventory_items_path(@connection) %>">
+      data-employees-url="<%= api_v1_quickbooks_connection_employees_path(@connection.id) %>"
+      data-time-activities-url="<%= api_v1_quickbooks_connection_time_activities_path(@connection.id) %>"
+      data-tax-codes-url="<%= api_v1_quickbooks_connection_tax_codes_path(@connection.id) %>"
+      data-inventory-items-url="<%= api_v1_quickbooks_connection_inventory_items_path(@connection.id) %>">
   <p>
-    <%= link_to "Company connection", quickbooks_connection_path(@connection) %>
+    <%= link_to "Company connection", quickbooks_connection_path(@connection.id) %>
     ·
-    <%= link_to "Financial records dashboard", quickbooks_connection_journal_entries_path(@connection) %>
+    <%= link_to "Financial records dashboard", quickbooks_connection_journal_entries_path(@connection.id) %>
     ·
-    <%= link_to "Sales and payables dashboard", quickbooks_connection_transactions_path(@connection) %>
+    <%= link_to "Sales and payables dashboard", quickbooks_connection_transactions_path(@connection.id) %>
     ·
     <%= link_to "API documentation", api_docs_path %>
   </p>
@@ -21,7 +21,12 @@
   <h1>QuickBooks workforce, tax, and inventory operations</h1>
   <p>
     Read the QuickBooks sandbox through JSON GET APIs and create one explicitly confirmed record through each
-    supported POST API. Every POST is idempotent, audited locally, and read back before Rails reports success.
+    supported POST API. Rails validates each create and reads it back from QuickBooks before reporting success.
+  </p>
+  <p class="danger-note">
+    This is a single-process, sandbox-only local demo. POST creates a real sandbox record, and repeated POSTs may
+    create duplicate records. Restarting Rails—or a development reload—can discard the process-local connection
+    and require reconnecting. Multiple Puma workers and production use are unsupported.
   </p>
 
   <div id="operations-api-alert" class="api-alert" role="alert" hidden>
@@ -55,7 +60,7 @@
       email, and optional phone; it never accepts SSN, birth date, address, pay rate, or compensation.
     </p>
 
-    <%= form_with url: api_v1_quickbooks_connection_employees_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_employees_path(@connection.id),
                   scope: :employee,
                   method: :post,
                   class: "filter-panel",
@@ -97,7 +102,7 @@
       does not convert it into payroll or an invoice.
     </p>
 
-    <%= form_with url: api_v1_quickbooks_connection_time_activities_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_time_activities_path(@connection.id),
                   scope: :time_activity,
                   method: :post,
                   class: "filter-panel",
@@ -144,7 +149,7 @@
       create an agency or rate, file a return, or make a tax payment.
     </p>
 
-    <%= form_with url: api_v1_quickbooks_connection_tax_codes_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_tax_codes_path(@connection.id),
                   scope: :tax_code,
                   method: :post,
                   class: "filter-panel",
@@ -194,7 +199,7 @@
       inventory value and financial reports. Use zero quantity when only establishing the item master record.
     </p>
 
-    <%= form_with url: api_v1_quickbooks_connection_inventory_items_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_inventory_items_path(@connection.id),
                   scope: :inventory_item,
                   method: :post,
                   class: "filter-panel",

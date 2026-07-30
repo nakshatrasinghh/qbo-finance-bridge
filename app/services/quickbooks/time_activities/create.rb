@@ -10,7 +10,6 @@ module Quickbooks
         hours: nil,
         minutes: nil,
         description: nil,
-        request_id:,
         client: nil
       )
         @connection = connection
@@ -19,18 +18,15 @@ module Quickbooks
         @hours_input = hours.to_s.strip
         @minutes_input = minutes.to_s.strip
         @description = description.to_s.strip
-        @request_id = request_id
-        @client = client || Client.new(connection: connection)
-        @post_attempted = false
+        @client = client || Client.new(connection:)
       end
 
       def call
         validate_input!
         validate_employee!
 
-        @post_attempted = true
-        response = client.post("timeactivity", json: payload, params: { requestid: request_id })
-        @quickbooks_entity_id = response.dig("TimeActivity", "Id").to_s
+        response = client.post("timeactivity", json: payload)
+        quickbooks_entity_id = response.dig("TimeActivity", "Id").to_s
         if quickbooks_entity_id.blank?
           raise_unexpected!("QuickBooks did not return the created TimeActivity ID.")
         end
@@ -38,29 +34,14 @@ module Quickbooks
         readback(quickbooks_entity_id)
       end
 
-      attr_reader :quickbooks_entity_id
-
-      def post_attempted?
-        @post_attempted
-      end
-
       private
 
-      attr_reader :client,
-                  :connection,
-                  :description,
-                  :employee_id,
-                  :hours,
-                  :minutes,
-                  :request_id,
-                  :txn_date
+      attr_reader :client, :connection, :description, :employee_id, :hours, :minutes, :txn_date
 
       def validate_input!
         @txn_date = Date.iso8601(@txn_date_input)
         raise_input!("Choose a valid transaction date.") unless txn_date.iso8601 == @txn_date_input
-        unless employee_id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT)
-          raise_input!("Choose a valid active Employee.")
-        end
+        raise_input!("Choose a valid active Employee.") unless EntityId.valid?(employee_id)
         unless @hours_input.match?(INTEGER_PATTERN)
           raise_input!("Hours must be a whole number from 0 to 8760.")
         end
@@ -87,10 +68,7 @@ module Quickbooks
 
       def validate_employee!
         employee =
-          Employees::Query
-            .new(connection: connection, client: client)
-            .call
-            .find { |record| record.id == employee_id }
+          Employees::Query.new(connection:, client:).call.find { |record| record.id == employee_id }
         raise_input!("The selected Employee is not active in QuickBooks.") unless employee
       end
 

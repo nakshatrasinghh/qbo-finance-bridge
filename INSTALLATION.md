@@ -1,118 +1,92 @@
-# Developer installation
+# Installation
 
-This guide gives every developer an independent QuickBooks Finance Bridge setup. The recommended path is the
-interactive `bin/install` command; manual commands are included only as a fallback.
+This guide installs the database-free QuickBooks sandbox bridge for local use.
 
-## What each developer needs
+## Requirements
 
-- Git
-- Ruby 3.4.10
-- PostgreSQL 16
-- An Intuit Developer account
-- A QuickBooks Online sandbox company
+- Ruby 3.4.10 from `.ruby-version`
+- a QuickBooks Online sandbox company
+- an Intuit developer application with the Accounting scope
 
-Node.js, npm, Yarn, and a separate frontend process are not required.
+No PostgreSQL server, database role, `DATABASE_URL`, migration, or database preparation is required.
 
-Ruby and Bundler have different version numbers:
+## 1. Install Ruby
 
-- `3.4.10` is the Ruby version, declared in `.ruby-version`.
-- Bundler is the Ruby dependency installer. Its compatible version is recorded in `Gemfile.lock`.
-
-Developers do not need to select or type a Bundler version. `bin/install` reads the lockfile and installs the
-required Bundler version automatically.
-
-## 1. Install Ruby and PostgreSQL
-
-One macOS setup option is:
+Install Ruby with your preferred version manager, then confirm:
 
 ```bash
-brew install rbenv ruby-build postgresql@16
-rbenv init
-rbenv install -s 3.4.10
-brew services start postgresql@16
-```
-
-Follow the instruction printed by `rbenv init` if shell configuration is required, then restart the terminal.
-
-Linux developers can use rbenv, asdf, mise, or their distribution's packages. Windows developers should use a
-Ruby 3.4.10 environment that can run the repository's Bash and Ruby executables, such as WSL 2.
-
-## 2. Create an Intuit app and sandbox
-
-This portal work cannot be automated by the repository.
-
-1. Sign in to the [Intuit Developer portal](https://developer.intuit.com/).
-2. Create or open an app with the **QuickBooks Online Accounting** permission.
-3. Open **Keys and credentials**.
-4. Select **Development** and keep the page available; the installer will ask for its Client ID and Client
-   Secret.
-5. Create or select a QuickBooks Online sandbox company.
-6. Add this Development redirect URI exactly:
-
-   ```text
-   http://localhost:3000/quickbooks/connections/callback
-   ```
-
-Do not use Production credentials. The application accepts only the QuickBooks sandbox environment.
-
-## 3. Clone the repository
-
-```bash
-git clone https://github.com/nakshatrasinghh/qbo-finance-bridge.git
-cd qbo-finance-bridge
 ruby --version
+gem --version
 ```
 
-Ruby `3.4.10` is required. If the last command reports another version and rbenv is installed, `bin/install`
-automatically relaunches itself with Ruby 3.4.10. With another Ruby manager, activate 3.4.10 before continuing.
+Ruby must report `3.4.10`. The recommended installer provisions Bundler 2.7.2 from `Gemfile.lock` and installs the
+application dependencies.
 
-## 4. Run the installer
+## 2. Configure the Intuit sandbox application
+
+In the Intuit developer portal:
+
+1. select the application's development/sandbox credentials;
+2. enable the QuickBooks Accounting scope;
+3. register this exact local redirect URI:
+
+```text
+http://localhost:3000/quickbooks/connections/callback
+```
+
+Production QuickBooks configuration fails closed; use development credentials for a sandbox company.
+
+## 3. Choose a credentials source
+
+The recommended local workflow uses ignored encrypted Rails credentials. In the next step, `bin/install` reuses
+an existing credentials/master-key pair or prompts for the Intuit development Client ID and Client Secret before
+creating one with this structure:
+
+```yaml
+secret_key_base: ...
+quickbooks:
+  client_id: ...
+  client_secret: ...
+  redirect_uri: http://localhost:3000/quickbooks/connections/callback
+```
+
+For an environment-only workflow, export:
+
+```bash
+export QUICKBOOKS_ENV=sandbox
+export QUICKBOOKS_CLIENT_ID="your-development-client-id"
+export QUICKBOOKS_CLIENT_SECRET="your-development-client-secret"
+export QUICKBOOKS_REDIRECT_URI="http://localhost:3000/quickbooks/connections/callback"
+```
+
+Never paste decrypted credentials or OAuth tokens into logs, documentation, screenshots, or issue trackers.
+Existing unused Active Record encryption entries in a developer-owned credentials file may remain, but this
+application neither generates nor requires them.
+
+## 4. Run setup
+
+For the recommended encrypted-credentials workflow, run:
 
 ```bash
 bin/install
 ```
 
-The installer performs these steps:
+The installer selects the Bundler version from `Gemfile.lock`, installs missing gems, creates ignored encrypted
+credentials when needed, validates the sandbox configuration, and runs `bin/setup --skip-server`. It never
+creates, prepares, migrates, or connects to a database.
 
-1. uses Ruby 3.4.10, automatically through rbenv when available, and rejects other Ruby versions;
-2. installs the Bundler version required by `Gemfile.lock` when necessary;
-3. installs the project gems;
-4. reuses a valid local credentials/master-key pair, or asks for the developer's Intuit Development Client ID
-   and Client Secret;
-5. generates the Rails secret and all three Active Record Encryption keys;
-6. writes only encrypted credentials to `config/credentials.yml.enc`;
-7. keeps `config/credentials.yml.enc` and `config/master.key` local and ignored by Git; and
-8. creates or migrates the development and test PostgreSQL databases.
-
-The Client Secret is hidden while it is entered in an interactive terminal. The installer does not print it or
-write plaintext credentials to the repository.
-
-If PostgreSQL cannot connect, confirm that PostgreSQL 16 is running and that the current operating-system user
-has a matching local PostgreSQL role. A team-managed database may instead be selected with `DATABASE_URL`.
-
-## What the generated encryption values mean
-
-Developers do not need to invent or manually replace placeholders when using `bin/install`.
-
-The installer generates:
-
-- `config/master.key`: decrypts the local Rails credentials file;
-- `active_record_encryption.primary_key`: encrypts stored QuickBooks access and refresh tokens;
-- `active_record_encryption.deterministic_key`: Rails' deterministic encryption key;
-- `active_record_encryption.key_derivation_salt`: derives encryption subkeys; and
-- `secret_key_base`: signs and encrypts Rails application data.
-
-These are application security keys, not values obtained from QuickBooks. The only values copied from Intuit are
-the Development Client ID and Client Secret. The redirect URI is fixed by this application.
-
-Never share or commit the credentials file, master key, generated encryption keys, Client Secret, access token,
-or refresh token. If the master key is lost, its credentials file cannot be decrypted. If the Active Record
-Encryption keys are replaced, previously stored OAuth tokens cannot be decrypted.
-
-## 5. Start Rails and connect the sandbox
+If all QuickBooks settings are supplied through environment variables, prepare the application without creating
+local encrypted credentials:
 
 ```bash
-QUICKBOOKS_ENV=sandbox bin/dev
+gem install bundler --version 2.7.2 --no-document
+bin/setup --skip-server
+```
+
+## 5. Start the application
+
+```bash
+bin/dev
 ```
 
 Open:
@@ -121,118 +95,90 @@ Open:
 http://localhost:3000/quickbooks/connections
 ```
 
-Select **Connect QuickBooks**, authorize the developer's sandbox company, and return to the connection page.
-Use **Inspect** to verify the connection before opening the finance dashboards.
+Choose **Connect a QuickBooks sandbox**, complete Intuit consent, and return to the connection page. Rails stores
+the access and refresh tokens only in its current process. The browser session stores only the opaque connection
+UUID and temporary OAuth state.
 
-## 6. Verify the installation
+## 6. Open a GET/POST dashboard
 
-The installer can verify the local bundle, encrypted credentials, PostgreSQL connection, and application
-configuration without changing QuickBooks:
+The connected-company page provides four interfaces:
+
+- `/quickbooks/connections/:connection_id/journal_entries` for financial records;
+- `/quickbooks/connections/:connection_id/transactions` for sales and payables;
+- `/quickbooks/connections/:connection_id/operations` for workforce, tax, and inventory; and
+- `/api-docs` for the Swagger GET/POST console.
+
+Swagger has no bearer-token input, Authorize workflow, or protected-operation locks. It exposes GET and POST
+controls only. Use the opaque connection handle displayed on the connection page for `{connection_id}`.
+
+For POST, Swagger automatically supplies the same-origin Rails session and CSRF header and asks for one explicit
+confirmation. Every execution is a fresh sandbox write and can create a duplicate. The application performs no
+local idempotency, replay, audit, or duplicate-name preflight.
+
+## Runtime constraints
+
+- Run one Rails/Puma process with normal thread concurrency.
+- Do not set `WEB_CONCURRENCY`, use Puma `--workers`, or deploy multiple replicas.
+- Restarting Rails loses the connection and requires OAuth reconnection.
+- Development code reload may also replace the in-memory store.
+- Existing PostgreSQL records are not read or migrated.
+- The design is sandbox-only and unsuitable for production.
+
+Production would require encrypted persistent realm/refresh-token storage, durable ownership, multi-process
+coordination, and operational recovery controls.
+
+## Optional settings
 
 ```bash
-bin/install --check
+export QUICKBOOKS_MINOR_VERSION=75
+export QUICKBOOKS_OPEN_TIMEOUT=5
+export QUICKBOOKS_READ_TIMEOUT=10
 ```
 
-Run the complete local pipeline. It prepares the databases, runs the Rails tests, checks formatting and style,
-and performs both dependency and static security audits:
+The dashboard is enabled automatically in development. Outside development, explicitly set:
+
+```bash
+export ENABLE_QUICKBOOKS_CONNECTION_DASHBOARD=true
+```
+
+This does not make the application production-ready.
+
+## Verification
+
+After setup, run the same complete pipeline used by CI:
 
 ```bash
 bin/ci
 ```
 
-Run the remaining boot and loading check:
+It checks Rails boot and Zeitwerk loading, runs the Rails tests, checks formatting and style, and performs
+dependency and static security audits. It does not start the server or contact QuickBooks.
+
+For focused checks:
 
 ```bash
+bin/install --check
+bin/rails test
+bin/format check
+bin/rubocop
+bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error
+bin/bundler-audit
 bin/rails zeitwerk:check
+bin/rails routes
+node --check app/assets/javascripts/api_docs.js
 ```
 
-While Rails is running:
+`bin/install --check` validates the ignored encrypted credentials/master-key pair. Skip that command when the
+application is configured only through environment variables.
 
-```bash
-curl -fsS http://localhost:3000/up
-curl -fsS http://localhost:3000/health
-```
+## Troubleshooting
 
-API documentation is available at:
-
-```text
-http://localhost:3000/api-docs
-```
-
-## Manual credentials fallback
-
-Use this only when `bin/install` cannot create local credentials.
-
-First install the bundle:
-
-```bash
-bundle install
-```
-
-Generate encryption keys:
-
-```bash
-bin/rails db:encryption:init
-```
-
-Rails prints three real random values in an `active_record_encryption` YAML block. Copy that complete block
-exactly. Do not replace its values with labels or example text.
-
-Open the ignored local credentials:
-
-```bash
-EDITOR="code --wait" bin/rails credentials:edit
-```
-
-Paste the generated encryption block, preserve any generated `secret_key_base`, and add:
-
-```yaml
-quickbooks:
-  client_id: PASTE_THE_INTUIT_DEVELOPMENT_CLIENT_ID
-  client_secret: PASTE_THE_INTUIT_DEVELOPMENT_CLIENT_SECRET
-  redirect_uri: http://localhost:3000/quickbooks/connections/callback
-```
-
-Save and close the editor, then prepare the databases:
-
-```bash
-bin/setup --skip-server
-```
-
-## Environment-variable alternative
-
-Deployments and temporary sessions may inject values instead of reading local Rails credentials:
-
-```bash
-export QUICKBOOKS_ENV=sandbox
-export QUICKBOOKS_CLIENT_ID='YOUR_DEVELOPMENT_CLIENT_ID'
-export QUICKBOOKS_CLIENT_SECRET='YOUR_DEVELOPMENT_CLIENT_SECRET'
-export QUICKBOOKS_REDIRECT_URI='http://localhost:3000/quickbooks/connections/callback'
-export ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY='YOUR_PRIMARY_KEY'
-export ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY='YOUR_DETERMINISTIC_KEY'
-export ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT='YOUR_KEY_DERIVATION_SALT'
-```
-
-A deployment also needs its normal Rails secret and database configuration. Do not store real values in files
-that may be copied, uploaded, or shared.
-
-## Common setup failures
-
-- **Wrong Ruby version:** enter the repository through the configured Ruby manager and confirm `ruby --version`
-  reports 3.4.10.
-- **Intuit redirect mismatch:** the Development redirect URI and Rails configuration must both be exactly
-  `http://localhost:3000/quickbooks/connections/callback`.
-- **Credentials cannot be decrypted:** the credentials file and master key do not match. Restore the developer's
-  matching pair or move both aside and rerun `bin/install`.
-- **QuickBooks configuration is missing:** rerun `bin/install` or add all three `quickbooks` entries manually.
-- **Token encryption fails:** all three `active_record_encryption` values must be present and unchanged.
-- **PostgreSQL cannot connect:** start PostgreSQL 16, configure the local role, or provide `DATABASE_URL`.
-- **Port 3000 is occupied:** stop the other process before starting Rails so the registered redirect URI remains
-  valid.
-
-## Official references
-
-- [Rails encrypted credentials](https://guides.rubyonrails.org/security.html#custom-credentials)
-- [Intuit sandbox companies](https://developer.intuit.com/app/developer/qbo/docs/develop/sandboxes/manage-your-sandboxes)
-- [Intuit Development redirect URIs](https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/set-redirect-uri)
-- [QuickBooks Online Accounting scope](https://developer.intuit.com/app/developer/qbo/docs/learn/scopes)
+- **Configuration missing:** set the three `QUICKBOOKS_*` values or add them to encrypted credentials.
+- **Redirect URI rejected:** make the Intuit portal value and `QUICKBOOKS_REDIRECT_URI` identical.
+- **Production disabled:** ensure `QUICKBOOKS_ENV=sandbox`.
+- **Reconnect required:** Rails restarted, reloaded, evicted the in-memory value, or the browser session changed.
+- **Puma worker error:** remove `WEB_CONCURRENCY` and any `--workers` option.
+- **Swagger POST blocked locally:** reconnect, remain on the same origin, and confirm the page includes Rails'
+  CSRF meta tag.
+- **Ambiguous POST failure:** do not retry automatically; inspect the QuickBooks sandbox first because the entity
+  may have been created.

@@ -1,393 +1,187 @@
-# QuickBooks financial records dashboard
+# Ruby CFO Bridge
 
-This is one simple Ruby on Rails application for finance teams to:
-
-- connect a QuickBooks Online sandbox;
-- GET QuickBooks-generated Profit & Loss, Balance Sheet, Cash Flow, General Ledger, and Trial Balance reports
-  through JSON APIs;
-- GET existing QuickBooks Journal Entries through a JSON API;
-- POST one balanced Journal Entry through a JSON API;
-- read the created entry back from QuickBooks and show its returned ID;
-- GET the local Journal Entry submission audit history without calling QuickBooks;
-- filter Journal Entries and audit operations by transaction date on the server, load additional pages, and
-  download the visible loaded records as CSV;
-- GET and POST limited Employee records and employee TimeActivities through Rails APIs;
-- GET TaxCodes, TaxRates, and TaxAgencies and POST a TaxCode using one existing active, applicability-compatible
-  TaxRate;
-- GET Inventory Items and eligible Accounts and POST one decimal-safe Inventory Item;
-- GET and POST Customers, Vendors, one-line Invoices, one-line Bills, customer Payments applied to open Invoices,
-  and check-style BillPayments applied to open Bills.
-
-There is no separate frontend project or generic integration framework. Rails serves a small vanilla-JavaScript
-dashboard. The financial-report, Account, and Journal Entry APIs call QuickBooks; the audit-history API reads
-PostgreSQL only.
-
-## MVP status
-
-The simplified local QuickBooks sandbox MVP is complete. Production QuickBooks access remains intentionally
-disabled; the setup, operating boundaries, and failure behavior are documented below.
-
-The canonical source repository is
-[`nakshatrasinghh/qbo-finance-bridge`](https://github.com/nakshatrasinghh/qbo-finance-bridge).
-`config/credentials.yml.enc`, `config/master.key`, `.env*`, logs, temp files, and storage remain local and
-ignored.
-
-## Rails JSON APIs
-
-The finance data-exchange surface is exactly twenty-nine operations:
+Ruby CFO Bridge is a Rails 8.1 application for working with a QuickBooks Online sandbox through three focused
+HTML dashboards and a Swagger API console. Rails exposes 28 finance operations while keeping every OAuth token
+and QuickBooks request on the server.
 
 ```text
-GET  /api/v1/quickbooks/connections/:connection_id/accounts
-GET  /api/v1/quickbooks/connections/:connection_id/reports/profit_and_loss
-GET  /api/v1/quickbooks/connections/:connection_id/reports/balance_sheet
-GET  /api/v1/quickbooks/connections/:connection_id/reports/cash_flow
-GET  /api/v1/quickbooks/connections/:connection_id/reports/general_ledger
-GET  /api/v1/quickbooks/connections/:connection_id/reports/trial_balance
-GET  /api/v1/quickbooks/connections/:connection_id/journal_entries
-POST /api/v1/quickbooks/connections/:connection_id/journal_entries
-GET  /api/v1/quickbooks/connections/:connection_id/journal_entry_operations
-GET  /api/v1/quickbooks/connections/:connection_id/employees
-POST /api/v1/quickbooks/connections/:connection_id/employees
-GET  /api/v1/quickbooks/connections/:connection_id/time_activities
-POST /api/v1/quickbooks/connections/:connection_id/time_activities
-GET  /api/v1/quickbooks/connections/:connection_id/tax_codes
-POST /api/v1/quickbooks/connections/:connection_id/tax_codes
-GET  /api/v1/quickbooks/connections/:connection_id/inventory_items
-POST /api/v1/quickbooks/connections/:connection_id/inventory_items
-GET  /api/v1/quickbooks/connections/:connection_id/customers
-POST /api/v1/quickbooks/connections/:connection_id/customers
-GET  /api/v1/quickbooks/connections/:connection_id/vendors
-POST /api/v1/quickbooks/connections/:connection_id/vendors
-GET  /api/v1/quickbooks/connections/:connection_id/invoices
-POST /api/v1/quickbooks/connections/:connection_id/invoices
-GET  /api/v1/quickbooks/connections/:connection_id/bills
-POST /api/v1/quickbooks/connections/:connection_id/bills
-GET  /api/v1/quickbooks/connections/:connection_id/customer_payments
-POST /api/v1/quickbooks/connections/:connection_id/customer_payments
-GET  /api/v1/quickbooks/connections/:connection_id/bill_payments
-POST /api/v1/quickbooks/connections/:connection_id/bill_payments
+Browser / Swagger UI
+  -> same-origin Rails controller
+  -> entity-specific validation and accounting rules
+  -> QuickBooks Online sandbox
+  -> QuickBooks readback and Rails verification
+  -> normalized JSON response
 ```
 
-## QuickBooks data preprocessing
+Rails is the only QuickBooks client. The browser never receives an Intuit access token, refresh token, client
+secret, or Authorization header.
 
-The Rails APIs are not raw QuickBooks pass-throughs. QuickBooks remains the accounting source of truth, while
-Rails turns its vendor-specific JSON into a smaller, validated, decimal-safe contract for the dashboard and other
-callers.
+## Current runtime model
 
-Every QuickBooks-backed GET follows the same basic path:
+- Database-free and PostgreSQL-free.
+- One process-local QuickBooks sandbox connection per browser session.
+- OAuth tokens exist only in the Rails process memory store.
+- The Rails session contains only an opaque connection UUID, plus temporary OAuth state during connection.
+- Restarting Rails discards the connection. Development code reload can do the same.
+- Multiple Puma workers and multiple application replicas are unsupported.
+- Existing PostgreSQL records are intentionally abandoned and are not migrated.
+- There is no local audit history, request replay, idempotency ledger, or submission-status polling.
+- Create flows do not perform application-level duplicate-name checks.
+- Every deliberate POST is a new operation and can create a duplicate sandbox record.
+- Every outbound QuickBooks POST receives a fresh server-generated QBO `requestid`.
+- This is a sandbox-only demonstration and is unsuitable for production.
 
-```text
-Connection-scoped request
-  -> sandbox QuickBooks API
-  -> JSON and entity-shape validation
-  -> reference/date/decimal normalization
-  -> stable Rails JSON
-```
+A production design would require encrypted persistent refresh-token and realm storage, durable ownership,
+multi-process coordination, recovery evidence, and a separate production-readiness review.
 
-Shared GET handling adds the company realm, OAuth bearer token, minor version, timeouts, safe error mapping, and
-`Cache-Control: no-store`. It may refresh an expired token and retry one GET after a `401`. Money is parsed with
-`BigDecimal` and serialized as decimal strings; dates use exact ISO `YYYY-MM-DD` values. Raw Intuit bodies,
-tokens, and fields outside the documented projection are not returned.
+## GET/POST dashboards
 
-Every create API additionally:
+After connecting a sandbox company, the connection page links to:
 
-1. permits and trims only its documented fields;
-2. requires a UUID `Idempotency-Key` and reserves a connection-scoped PostgreSQL audit row;
-3. hashes the canonical request so an identical success can be replayed without another QuickBooks POST;
-4. requeries current QuickBooks references before creating the entity;
-5. builds one fixed entity-specific payload with exact decimal values;
-6. reads the created entity back and verifies its important fields; and
-7. records the result as `succeeded`, `rejected`, or `uncertain`.
+- `/quickbooks/connections/:connection_id/journal_entries` for financial records;
+- `/quickbooks/connections/:connection_id/transactions` for sales and payables;
+- `/quickbooks/connections/:connection_id/operations` for workforce, tax, and inventory; and
+- `/api-docs` for the Swagger GET/POST console.
 
-POST is never automatically retried after an ambiguous failure because QuickBooks may already have committed the
-record.
+The three HTML dashboards and Swagger call the same connection-scoped Rails endpoints. Replace
+`:connection_id` with the opaque handle shown on the connected-company page. POST creates a real sandbox record,
+and repeating a POST may create a duplicate.
 
-| API surface | GET preprocessing | POST preprocessing |
-|---|---|---|
-| Accounts (1 GET) | Pages through active Accounts, validates required fields and duplicate IDs, sorts display names, and removes Accounts Receivable and Accounts Payable from Journal Entry choices. | None; Account creation is not exposed. |
-| Financial reports (5 GETs) | Validates report-specific dates, six-month period limits, and supported Cash/Accrual input; validates currency, timestamps, columns, and decimal money cells; flattens recursive section/data/summary rows while preserving order and depth. | None; Rails does not calculate, persist, or modify report totals. |
-| Journal Entries (GET/POST) | Validates date filters and bounded pagination, queries deterministic pages, keeps Journal Entry lines, extracts Account references, parses decimal amounts, and derives a balanced flag. | Validates an exact date, memo, positive amount, and two different eligible active Accounts; creates equal Debit/Credit lines and verifies the returned posting. |
-| Journal Entry audit (1 GET) | Reads only connection-scoped `journal_entry_create` rows from PostgreSQL, filters by the original transaction date, paginates, and omits keys, digests, raw payloads, tokens, and stored result bodies. It does not call QuickBooks. | Rows are produced by the Journal Entry create flow; there is no audit POST endpoint. |
-| Employees (GET/POST) | Keeps active directory records, extracts nested email/phone values, validates identity fields, sorts by display name, and explicitly reports that full payroll is unsupported. | Accepts names and optional contact data only, excludes payroll/sensitive fields, validates formats, and verifies readback. |
-| Time Activities (GET/POST) | Returns the latest 100 records, flattens `EmployeeRef`, validates dates, and converts hours/minutes to integers. | Requires a current active Employee, exact date, nonzero whole hours/minutes, and bounded description; verifies the returned activity. |
-| Tax configuration (GET/POST) | Combines TaxCode, TaxRate, and TaxAgency queries; flattens rate-reference lists, validates percentage decimals, removes identical duplicate IDs, rejects conflicting duplicates, and sorts each collection. | Rejects duplicate names, requires an active existing rate and an agency compatible with Sales/Purchase applicability, then requeries the catalog to verify creation. |
-| Inventory Items (GET/POST) | Parses quantity, price, and cost decimals; validates Account references and dates; combines active Accounts into eligible income, COGS, and inventory-asset choices. | Validates unique name, exact start date, nonnegative decimal quantity/price/cost, and eligible live Accounts; verifies amounts and references on readback. |
-| Customers (GET/POST) | Keeps active Customers, extracts nested contact values, parses balance as a decimal, validates required fields, and sorts by display name. | Validates contact fields, rejects a case-insensitive duplicate active display name, and verifies the created Customer. |
-| Vendors (GET/POST) | Applies the Customer-style active/contact/balance normalization to Vendors. | Validates contact fields, rejects a case-insensitive duplicate active display name, and verifies the created Vendor. |
-| Invoices (GET/POST) | Validates IDs/dates/totals/balances, keeps sales-item lines, flattens Customer and Item references, sorts newest first, and adds active Customer plus eligible sales Item choices. | Creates one positive decimal sales line for a current Customer and Item, enforces due date on/after invoice date, and verifies dates, references, line amount, total, and balance. |
-| Bills (GET/POST) | Validates IDs/dates/totals/balances, keeps account-based expense lines, flattens Vendor/Account references, sorts newest first, and adds active Vendor, expense, and Accounts Payable choices. | Creates one positive decimal expense line using current eligible references and verifies the Vendor, payable Account, dates, line, total, and balance. |
-| Customer Payments (GET/POST) | Parses total/unapplied decimal amounts and Invoice links, sorts newest first, and separately derives open Invoice choices from positive current balances. | Requeries the selected open Invoice, caps the amount at its current balance, derives the Customer from the Invoice, creates one link, and verifies the application. |
-| Bill Payments (GET/POST) | Parses Check/CreditCard payment Accounts and Bill links, sorts newest first, and derives open Bill plus active Bank Account choices. | Requeries the open Bill and Bank Account, caps the amount at the current Bill balance, derives Vendor/A/P references, creates one check-style link, and verifies the application. |
+## Finance API
 
-This is schema and write-safety preprocessing, not a general analytics pipeline. The app does not yet build
-question-specific aggregates such as overdue balance by customer, maintain a full local QuickBooks warehouse,
-consume CDC/webhooks, perform currency conversion, or create embeddings. Many entity catalogs are also bounded
-at 1,000 records; Accounts and Journal Entries have explicit multi-page handling.
+API contract version 2.0.0 contains exactly 28 finance operations:
 
-Repository documentation:
+| Capability | GET | POST |
+| --- | ---: | ---: |
+| Eligible Accounts | 1 | 0 |
+| Financial reports: Profit & Loss, Balance Sheet, Cash Flow, General Ledger, Trial Balance | 5 | 0 |
+| Journal Entries | 1 | 1 |
+| Employees | 1 | 1 |
+| Time Activities | 1 | 1 |
+| Tax Codes | 1 | 1 |
+| Inventory Items | 1 | 1 |
+| Customers | 1 | 1 |
+| Vendors | 1 | 1 |
+| Invoices | 1 | 1 |
+| Bills | 1 | 1 |
+| Customer Payments | 1 | 1 |
+| Bill Payments | 1 | 1 |
+| **Total** | **17** | **11** |
 
-- [`docs/quickbooks_data_model.md`](docs/quickbooks_data_model.md): QuickBooks entities and their accounting
-  relationships.
-- [`docs/quickbooks_data_normalization.md`](docs/quickbooks_data_normalization.md): the ten transformations from
-  vendor-specific QuickBooks JSON to the stable Rails contract.
-- [`docs/architecture.md`](docs/architecture.md): Rails components and responsibilities.
-- [`docs/data_flow.md`](docs/data_flow.md): runtime request and processing sequences.
+`GET /health` is a separate liveness endpoint and is not included in those finance counts.
 
-The three connection-owned HTML routes are frontend shells only. Browser JavaScript calls the JSON APIs after
-load; ERB rendering never exchanges finance data with QuickBooks.
+Each of the eleven entity-specific `Submit` objects keeps an explicit request path:
 
-The application also retains its read-only `GET /health` JSON liveness endpoint.
+1. accept only allowlisted input;
+2. normalize decimal strings with `BigDecimal` and dates with strict ISO 8601 parsing;
+3. apply entity-specific accounting and current-reference validation;
+4. make one QuickBooks sandbox POST with an internal UUID `requestid`;
+5. read the entity back by its QuickBooks ID;
+6. verify the readback;
+7. serialize the verified entity and return HTTP 201.
 
-## OpenAPI and Swagger UI
+The application does not preflight Customer, Vendor, Inventory Item, or Tax Code names for duplicates. QuickBooks
+may still reject a request under its own rules. Ambiguous POST failures are never retried automatically and Rails
+does not claim whether QuickBooks created the entity.
 
-Open the API documentation at:
+## Swagger API console
+
+After connecting a sandbox company, open:
 
 ```text
 http://localhost:3000/api-docs
 ```
 
-The page renders the checked-in OpenAPI 3.0.3 contract at `docs/openapi.yaml`. It documents the twenty-nine finance
-data operations and health, including read models, eleven audited/idempotent create contracts, replay responses, and
-normalized errors. The local Journal Entry audit GET is explicitly PostgreSQL-only. Swagger UI permits
-interactive GET requests only. POST operations are visible as documentation but cannot be executed from Swagger
-because each would create a real QuickBooks sandbox record.
+Swagger exposes GET and POST only. The OpenAPI document has no browser bearer scheme, login control, or
+operation-level security declaration. For a same-origin POST, the Swagger initializer:
 
-Swagger UI is loaded from the pinned official `swagger-ui-dist@5.32.8` browser distribution. No Swagger gem,
-RSpec integration, Node package, or second frontend process is required.
+- reads the Rails authenticity token from the page;
+- adds `X-CSRF-Token`;
+- sends the current same-origin Rails session cookie;
+- displays one confirmation before the request;
+- aborts locally if the URL is cross-origin, the token is absent, or the user cancels.
 
-## What “financial record” means
+POST creates a real record in the connected QuickBooks sandbox. Repeating Execute may create another record.
 
-QuickBooks does not have one generic `FinancialRecord` API. This dashboard uses `JournalEntry` for a controlled
-posting record and separate read-only report endpoints for QuickBooks-generated financial statements.
-
-The form asks for:
-
-- date;
-- memo;
-- positive amount;
-- one existing QuickBooks debit account;
-- one different existing QuickBooks credit account.
-
-Rails sends two lines with the same amount, so debit equals credit. Accounts Receivable and Accounts Payable are excluded because QuickBooks requires an additional customer or vendor reference for those lines.
-
-## Runtime
+## Requirements and setup
 
 - Ruby 3.4.10
+- Bundler 2.7.2
 - Rails 8.1.3
-- PostgreSQL 16
-- Faraday 2.14.3
+- one Intuit developer sandbox application
 
-## Installation
+PostgreSQL, SQLite, Redis, and another persistence service are not required.
 
-Follow [`INSTALLATION.md`](INSTALLATION.md) to install Ruby and PostgreSQL, create developer-specific encrypted
-credentials, configure an Intuit sandbox app, prepare the databases, connect QuickBooks, and validate the
-checkout.
-
-After installing Ruby 3.4.10 and PostgreSQL 16, the primary setup command is:
+Follow [INSTALLATION.md](INSTALLATION.md). The recommended first-time setup is:
 
 ```bash
 bin/install
+bin/dev
 ```
 
-## Run the app
+Open `http://localhost:3000/quickbooks/connections`, connect a sandbox, and choose an HTML dashboard or Swagger.
+Intuit must be configured with the exact callback URI shown in the installation guide.
 
-From the repository root:
+## Configuration
+
+The application accepts these secrets from environment variables or encrypted Rails credentials:
+
+```yaml
+secret_key_base: ...
+quickbooks:
+  client_id: ...
+  client_secret: ...
+  redirect_uri: http://localhost:3000/quickbooks/connections/callback
+```
+
+Runtime settings:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `QUICKBOOKS_ENV` | `sandbox` | Must remain `sandbox`; another value fails closed |
+| `QUICKBOOKS_CLIENT_ID` | credentials | Intuit client ID |
+| `QUICKBOOKS_CLIENT_SECRET` | credentials | Intuit client secret |
+| `QUICKBOOKS_REDIRECT_URI` | credentials | Exact OAuth callback URI |
+| `QUICKBOOKS_MINOR_VERSION` | `75` | Minimum supported QBO minor version |
+| `QUICKBOOKS_OPEN_TIMEOUT` | `5` | Connection timeout in seconds |
+| `QUICKBOOKS_READ_TIMEOUT` | `10` | Response timeout in seconds |
+| `ENABLE_QUICKBOOKS_CONNECTION_DASHBOARD` | development only | Explicitly expose the local dashboard outside development |
+
+Do not configure `WEB_CONCURRENCY`; this process-local design deliberately runs Puma in single mode.
+
+## Security boundaries
+
+- OAuth state is time-limited and compared securely.
+- API connection handles must match the current browser session and missing process state returns
+  `quickbooks_reconnect_required` with HTTP 401.
+- Rails CSRF protection remains enabled for Swagger and dashboard POSTs.
+- QuickBooks hosts are fixed server-side and production selection fails closed.
+- Token and secret parameter names are filtered from logs.
+- Token-bearing value objects redact inspection and are never rendered or serialized.
+- Disconnect revocation and token refresh share the same per-connection synchronization boundary.
+
+## Verification
+
+Run the complete local verification pipeline:
 
 ```bash
-brew services start postgresql@16
-QUICKBOOKS_ENV=sandbox bin/dev
+bin/ci
 ```
 
-Open:
+After setup, `bin/ci` verifies Rails boot and Zeitwerk loading, runs the Rails test suite, checks Ruby formatting
+and style, and runs dependency and static security audits. These checks do not make a live QuickBooks request.
 
-```text
-http://localhost:3000/quickbooks/connections
-```
+Use `bin/install --check` to validate an ignored local credentials pair and sandbox configuration. Use
+`node --check app/assets/javascripts/api_docs.js` for a focused JavaScript syntax check.
 
-Select the connected sandbox company, then open **Financial records**, **Sales and payables**, or **Workforce,
-tax, and inventory**.
+## Current documentation
 
-This is the frontend. The JavaScript is served by Rails/Propshaft. No `npm`, `yarn`, or second process is required.
-
-## QuickBooks credentials
-
-`bin/install` securely asks for each developer's Intuit Development Client ID and Client Secret, generates the
-Rails and Active Record Encryption keys, and writes an ignored encrypted credentials/master-key pair. Developers
-do not manually invent encryption values.
-
-In the Intuit developer portal, use Development keys, enable the QuickBooks accounting scope, and register this exact redirect URI:
-
-```text
-http://localhost:3000/quickbooks/connections/callback
-```
-
-Both `config/credentials.yml.enc` and `config/master.key` stay local and ignored. Never paste the client secret,
-access token, refresh token, encryption keys, or master key into documentation or version control. The complete
-workflow, manual fallback, and key explanations are in [`INSTALLATION.md`](INSTALLATION.md).
-
-Environment variables remain available for deployment/CI, but they are not required for this configured checkout:
-
-```bash
-export QUICKBOOKS_ENV=sandbox
-export QUICKBOOKS_CLIENT_ID='YOUR_DEVELOPMENT_CLIENT_ID'
-export QUICKBOOKS_CLIENT_SECRET='YOUR_DEVELOPMENT_CLIENT_SECRET'
-export QUICKBOOKS_REDIRECT_URI='http://localhost:3000/quickbooks/connections/callback'
-```
-
-Production QuickBooks access is intentionally disabled.
-
-## How the dashboard works
-
-### GET
-
-Opening the page causes browser JavaScript to perform four Rails API requests:
-
-1. `GET .../accounts`, which queries active QuickBooks Accounts for the dropdowns;
-2. `GET .../journal_entries?page=1&per_page=25`, which queries the first QuickBooks Journal Entry page;
-3. `GET .../journal_entry_operations?page=1&per_page=25`, which reads the first local audit page from PostgreSQL
-   and makes no QuickBooks request;
-4. `GET .../reports/profit_and_loss`, which loads the default rolling six-month Accrual statement.
-
-### Workforce, tax, and inventory operations
-
-The separate `/quickbooks/connections/:connection_id/operations` page loads four independent GET APIs after its
-HTML shell renders.
-
-The payroll scope is intentionally limited. The app does not run payroll, calculate wages, create paychecks,
-manage deductions, or file payroll tax. It supports public Accounting API Employee records and employee
-TimeActivities only.
-
-Each of the four POST APIs requires Rails CSRF plus a UUID `Idempotency-Key`, reserves a connection-scoped
-audit row before external HTTP, validates current QuickBooks references, forwards the UUID as `requestid`, and
-reads the created record back before reporting HTTP 201. A matching successful replay returns HTTP 200 without a
-new QuickBooks call; conflicting or unresolved reuse returns HTTP 409.
-
-### Customers, vendors, sales, and payables
-
-The separate `/quickbooks/connections/:connection_id/transactions` page loads six independent GET APIs for
-Customers, Vendors, Invoices, Bills, customer Payments, and BillPayments. Invoice responses also supply active
-Customer and sales-Item choices. Bill responses supply active Vendor, expense Account, and Accounts Payable
-choices. Payment responses supply currently open source transactions, and BillPayment also supplies active bank
-Accounts.
-
-Each create is deliberately narrow: a unique Customer or Vendor list record, a one-line Invoice, a one-line
-account-based Bill, one Payment applied to one open Invoice, or one check-style BillPayment applied to one open
-Bill. Amounts are decimal strings, dates are exact ISO 8601 values, and referenced records are re-queried before
-POST. All six use the same audit/idempotency/readback safety sequence.
-
-### Read-only financial statements
-
-The dashboard exposes five separate GET APIs:
-
-```text
-GET .../reports/profit_and_loss?start_date=2026-01-16&end_date=2026-07-16&accounting_method=Accrual
-GET .../reports/balance_sheet?as_of_date=2026-07-16&accounting_method=Accrual
-GET .../reports/cash_flow?start_date=2026-01-16&end_date=2026-07-16
-GET .../reports/general_ledger?start_date=2026-06-21&end_date=2026-07-21&accounting_method=Accrual
-GET .../reports/trial_balance?start_date=2026-06-21&end_date=2026-07-21&accounting_method=Accrual
-```
-
-Profit & Loss, Cash Flow, General Ledger, and Trial Balance accept inclusive ISO periods of at most six calendar
-months. Balance Sheet accepts one `as_of_date`, which Rails sends to QuickBooks as `end_date`. Every report except
-Cash Flow accepts `Cash` or `Accrual`. The General Ledger integration uses the explicit
-`reports/GeneralLedger` path.
-
-Rails normalizes QuickBooks' recursive report envelope into ordered columns plus flattened `section`, `data`, and
-`summary` rows with their original nesting depth. Money cells remain validated decimal strings. The dashboard
-displays raw QuickBooks values and can download the current statement as formula-safe CSV; it does not calculate,
-store, or POST report values.
-
-### Read-only filters, pagination, and CSV
-
-Both read APIs accept the same optional query parameters:
-
-```text
-txn_date_from=2026-07-01&txn_date_to=2026-07-31&page=1&per_page=25
-```
-
-Dates must be exact ISO 8601 calendar dates and are inclusive. `page` is 1–10,000; `per_page` is 1–50 and defaults
-to 50 for a direct API call. Invalid parameters return HTTP 422 with
-`quickbooks_read_parameters_invalid`. Each successful response includes the data array, echoed `filters`, and
-`pagination` metadata containing `page`, `per_page`, `returned_count`, `has_more`, and `next_page`.
-
-The dashboard requests 25 records per page and keeps the two read sources independent:
-
-- entry-date from/to is sent to both GET APIs and reloads page 1;
-- Journal Entries are ordered by transaction date descending and QuickBooks ID descending;
-- audit operations are ordered by submission time descending and local ID descending, while the date predicate
-  applies to the original submitted Journal Entry date;
-- separate **Load more** buttons request the next page only for the relevant table;
-- memo is applied in the browser to Journal Entry and audit pages loaded so far;
-- audit status is applied in the browser only to loaded local operations;
-- each CSV contains only the currently visible loaded data;
-- the Journal Entry CSV uses one row per debit/credit line, while the audit CSV uses one row per operation;
-- decimal strings and ISO 8601 source values are copied without accounting calculations;
-- every CSV field is quoted, embedded quotes are escaped, and spreadsheet formula prefixes are neutralized.
-
-The downloads are created temporarily in the browser; Rails does not add an export route or write a server-side
-file. The public finance API surface is therefore the twenty-nine operations listed above.
-
-### Journal Entry POST
-
-Submitting the form calls `POST .../journal_entries` with JSON. The API:
-
-1. requires a browser-generated UUID `Idempotency-Key` and reserves it in a connection-scoped local audit row;
-2. validates date, memo, amount, and two different Account IDs;
-3. rereads active Accounts to reject stale or fabricated selections;
-4. sends one JSON `POST /journalentry` to QuickBooks with the same UUID as Intuit's `requestid` query parameter;
-5. reads `GET /journalentry/:id` back;
-6. verifies the ID, date, balance, amount, and selected accounts;
-7. marks the audit row succeeded and returns HTTP 201 JSON with the QuickBooks ID and local operation ID.
-
-The browser keeps one UUID for one intended form submission. A completed request repeated with the same UUID and
-the same canonical fields returns the stored result with HTTP 200 and `Idempotency-Replayed: true`; Rails does not
-call QuickBooks. The same UUID with different fields returns HTTP 409. A pending, rejected, or uncertain operation
-also returns HTTP 409 instead of risking a second QuickBooks POST. A deliberately corrected or new transaction
-must use a new UUID.
-
-Every newly successful POST creates a real posting transaction in the sandbox. A replayed success does not. The
-page shows a confirmation before sending and refreshes the records and local audit tables after every POST
-outcome, including a rejection or uncertain result. These follow-up requests are GET-only reconciliation reads;
-the application never automatically retries a Journal Entry POST after an HTTP 401 or uncertain transport result.
-The durable key and audit state make that uncertainty visible without creating another record.
-
-The APIs are currently intended for this same-origin development dashboard. Rails CSRF protection applies to POST; production authentication is intentionally not invented for a local sandbox tool.
-
-### API failures
-
-When any dashboard GET fails, the browser retries that Rails GET once after 500 ms only for the safe
-`quickbooks_timeout` and `quickbooks_unavailable` codes. It never retries a POST. If the second GET also fails,
-the page shows a prominent red error banner containing the API's safe error message.
-The affected statement table, account selectors, QuickBooks records table, or local audit table also change from
-“Loading” to an explicit unavailable state. If Accounts cannot be loaded, POST remains disabled. A financial
-statement or audit-history failure does not disable posting because those reads are independent.
-
-After every dashboard POST response, successful or not, the browser calls the related GET API or APIs and reports
-the POST and refresh outcomes separately. The form values remain available after failure. This wording and
-behavior are deliberate: a response or readback failure does not always prove that QuickBooks rejected the
-transaction, while the reconciliation GET may already show the native record. The browser preserves the UUID for
-uncertain/in-progress failures. It renews the UUID after malformed keys, rejected operations, definitive
-same-key/different-payload conflicts, and entity-specific local validation errors. Rails refuses to resend an
-unresolved key. The banner can be dismissed; the smaller status line continues to show the outcome. Swagger
-displays HTTP failures inside the expanded operation as usual.
-
-## Local validation commands
-
-```bash
-RBENV_VERSION=3.4.10 rbenv exec bundle check
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/format write
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/format check
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails db:prepare
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails test
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails db:migrate:status
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails routes -g quickbooks
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails routes -g api-docs
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails zeitwerk:check
-RBENV_VERSION=3.4.10 rbenv exec ruby bin/rails runner 'puts "Rails booted successfully"'
-node --check app/assets/javascripts/financial_records.js
-node --check app/assets/javascripts/operational_capabilities.js
-node --check app/assets/javascripts/accounting_transactions.js
-ruby -e 'require "yaml"; puts YAML.safe_load_file("docs/openapi.yaml").fetch("openapi")'
-RUBOCOP_CACHE_ROOT=tmp/rubocop_cache RBENV_VERSION=3.4.10 rbenv exec ruby bin/rubocop
-RBENV_VERSION=3.4.10 rbenv exec bundle exec brakeman --no-pager
-```
+- [Installation](INSTALLATION.md)
+- [Architecture](docs/architecture.md)
+- [Data flow](docs/data_flow.md)
+- [Data dictionary](docs/data_dictionary.md)
+- [OpenAPI contract](docs/openapi.yaml)
+- [Capability matrix](docs/qbo_capability_matrix.md)
+- [QuickBooks data model](docs/quickbooks_data_model.md)
+- [QuickBooks data normalization](docs/quickbooks_data_normalization.md)
+- [Engineering principles](docs/engineering_principles.md)

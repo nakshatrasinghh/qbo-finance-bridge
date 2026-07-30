@@ -4,7 +4,7 @@ module Quickbooks
       MAX_RESULTS = 100
 
       def initialize(connection:, client: nil)
-        @client = client || Client.new(connection: connection)
+        @client = client || Client.new(connection:)
       end
 
       def call
@@ -28,8 +28,7 @@ module Quickbooks
 
             activity = Details.from_payload(payload)
             valid =
-              activity.id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT) &&
-                activity.txn_date.match?(/\A\d{4}-\d{2}-\d{2}\z/) &&
+              EntityId.valid?(activity.id) && activity.txn_date.match?(/\A\d{4}-\d{2}-\d{2}\z/) &&
                 activity.employee_id.present? && activity.hours.is_a?(Integer) &&
                 activity.minutes.is_a?(Integer)
             raise_unexpected! unless valid

@@ -4,19 +4,19 @@
 <% end %>
 
 <main data-accounting-transactions
-      data-customers-url="<%= api_v1_quickbooks_connection_customers_path(@connection) %>"
-      data-vendors-url="<%= api_v1_quickbooks_connection_vendors_path(@connection) %>"
-      data-invoices-url="<%= api_v1_quickbooks_connection_invoices_path(@connection) %>"
-      data-bills-url="<%= api_v1_quickbooks_connection_bills_path(@connection) %>"
-      data-customer-payments-url="<%= api_v1_quickbooks_connection_customer_payments_path(@connection) %>"
-      data-bill-payments-url="<%= api_v1_quickbooks_connection_bill_payments_path(@connection) %>">
+      data-customers-url="<%= api_v1_quickbooks_connection_customers_path(@connection.id) %>"
+      data-vendors-url="<%= api_v1_quickbooks_connection_vendors_path(@connection.id) %>"
+      data-invoices-url="<%= api_v1_quickbooks_connection_invoices_path(@connection.id) %>"
+      data-bills-url="<%= api_v1_quickbooks_connection_bills_path(@connection.id) %>"
+      data-customer-payments-url="<%= api_v1_quickbooks_connection_customer_payments_path(@connection.id) %>"
+      data-bill-payments-url="<%= api_v1_quickbooks_connection_bill_payments_path(@connection.id) %>">
   <p>
-    <%= link_to "Company connection", quickbooks_connection_path(@connection) %>
+    <%= link_to "Company connection", quickbooks_connection_path(@connection.id) %>
     ·
     <%= link_to "Financial reports and Journal Entries",
-                quickbooks_connection_journal_entries_path(@connection) %>
+                quickbooks_connection_journal_entries_path(@connection.id) %>
     ·
-    <%= link_to "Workforce, tax, and inventory", quickbooks_connection_operations_path(@connection) %>
+    <%= link_to "Workforce, tax, and inventory", quickbooks_connection_operations_path(@connection.id) %>
     ·
     <%= link_to "API documentation", api_docs_path %>
   </p>
@@ -25,6 +25,11 @@
   <p>
     Read customers, vendors, invoices, bills, and their payments through JSON GET APIs. Each form creates one
     deliberately small sandbox record through its matching POST API after confirmation.
+  </p>
+  <p class="danger-note">
+    This is a single-process, sandbox-only local demo. POST creates a real sandbox record, and repeated POSTs may
+    create duplicate records. Restarting Rails—or a development reload—can discard the process-local connection
+    and require reconnecting. Multiple Puma workers and production use are unsupported.
   </p>
 
   <div id="transactions-api-alert" class="api-alert" role="alert" hidden>
@@ -42,8 +47,7 @@
     <p>
       Customer and Vendor creates are non-posting list records. Invoice, Bill, Payment, and BillPayment creates
       are real accounting transactions that change sandbox receivable, payable, income, expense, cash, or
-      inventory balances. Every POST requires confirmation, a UUID idempotency key, local audit reservation, and
-      QuickBooks readback.
+      inventory balances. Every POST requires confirmation and QuickBooks readback before Rails reports success.
     </p>
     <p>
       Each transaction has one line and uses only active QuickBooks references. Customer payments apply to one
@@ -53,7 +57,7 @@
 
   <section aria-labelledby="customers-heading">
     <h2 id="customers-heading">Customers — GET and POST</h2>
-    <%= form_with url: api_v1_quickbooks_connection_customers_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_customers_path(@connection.id),
                   scope: :customer,
                   method: :post,
                   class: "filter-panel",
@@ -77,7 +81,7 @@
 
   <section aria-labelledby="vendors-heading">
     <h2 id="vendors-heading">Vendors — GET and POST</h2>
-    <%= form_with url: api_v1_quickbooks_connection_vendors_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_vendors_path(@connection.id),
                   scope: :vendor,
                   method: :post,
                   class: "filter-panel",
@@ -102,7 +106,7 @@
   <section aria-labelledby="invoices-heading">
     <h2 id="invoices-heading">Invoices — GET and POST</h2>
     <p class="danger-note">Creating an Invoice increases accounts receivable and records a sale in the sandbox.</p>
-    <%= form_with url: api_v1_quickbooks_connection_invoices_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_invoices_path(@connection.id),
                   scope: :invoice,
                   method: :post,
                   class: "filter-panel",
@@ -129,7 +133,7 @@
   <section aria-labelledby="bills-heading">
     <h2 id="bills-heading">Bills — GET and POST</h2>
     <p class="danger-note">Creating a Bill increases accounts payable and records an expense in the sandbox.</p>
-    <%= form_with url: api_v1_quickbooks_connection_bills_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_bills_path(@connection.id),
                   scope: :bill,
                   method: :post,
                   class: "filter-panel",
@@ -157,7 +161,7 @@
   <section aria-labelledby="customer-payments-heading">
     <h2 id="customer-payments-heading">Customer payments — GET and POST</h2>
     <p class="danger-note">This applies one payment to one open Invoice and reduces its receivable balance.</p>
-    <%= form_with url: api_v1_quickbooks_connection_customer_payments_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_customer_payments_path(@connection.id),
                   scope: :customer_payment,
                   method: :post,
                   class: "filter-panel",
@@ -181,7 +185,7 @@
   <section aria-labelledby="bill-payments-heading">
     <h2 id="bill-payments-heading">Bill payments — GET and POST</h2>
     <p class="danger-note">This records one check-style payment from one bank Account against one open Bill.</p>
-    <%= form_with url: api_v1_quickbooks_connection_bill_payments_path(@connection),
+    <%= form_with url: api_v1_quickbooks_connection_bill_payments_path(@connection.id),
                   scope: :bill_payment,
                   method: :post,
                   class: "filter-panel",

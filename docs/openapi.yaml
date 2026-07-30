@@ -1,208 +1,212 @@
+---
 openapi: 3.0.3
 info:
   title: QuickBooks Finance Bridge API
-  version: 1.5.2
-  description: |
-    JSON endpoints used by the local QuickBooks sandbox dashboard. Rails exposes twenty-nine same-origin finance
-    JSON operations: five reports, Account and Journal Entry reads, local Journal Entry audit history, and
-    controlled GET/POST pairs for Journal Entries, Employees, TimeActivities, TaxCodes, Inventory Items,
-    Customers, Vendors, Invoices, Bills, Customer Payments, and Bill Payments. A separate read-only endpoint
-    reports application liveness. Rails is the API boundary and calls the QuickBooks Online sandbox behind the
-    accounting endpoints; Journal Entry audit history reads PostgreSQL only.
+  version: 2.0.0
+  description: |-
+    Same-origin JSON API for a local, sandbox-only QuickBooks demo. Rails exposes exactly twenty-eight finance
+    operations: seventeen GET operations and eleven POST operations, plus a separate health endpoint. Swagger calls
+    Rails through the current browser session; Rails alone handles OAuth tokens, input allowlisting, accounting
+    validation, QuickBooks calls, readback, verification, and normalized errors. The browser never receives a
+    QuickBooks bearer token.
 
-    This is a local sandbox API. Every POST creates a real QuickBooks sandbox record, requires a Rails session,
-    CSRF token, and UUID Idempotency-Key, and is intentionally not executable from Swagger UI. Employee and
-    TimeActivity are payroll-adjacent Accounting API capabilities; full payroll is not exposed.
+    Each POST creates a real record in the connected QuickBooks sandbox. Repeated executions are new create
+    operations and may create duplicate records. Connections are process-local and disappear after a Rails restart
+    or may disappear after a development reload. Multiple Puma workers and production use are unsupported. A
+    production design would require encrypted persistent storage for refresh tokens and realm identifiers.
 servers:
-  - url: /
-    description: Current Rails application
+- url: "/"
+  description: Current Rails application
 tags:
-  - name: System
-    description: Application liveness.
-  - name: Accounts
-    description: Eligible active QuickBooks Accounts for Journal Entry lines.
-  - name: Financial Reports
-    description: Read-only statements calculated by QuickBooks from existing sandbox accounting data.
-  - name: Journal Entries
-    description: Balanced QuickBooks sandbox financial records.
-  - name: Audit History
-    description: Read-only local evidence of Journal Entry submission operations.
-  - name: Workforce
-    description: Payroll-adjacent Employee records and employee TimeActivities; not payroll processing.
-  - name: Tax Configuration
-    description: QuickBooks TaxCodes, TaxRates, and TaxAgencies with controlled TaxCode creation.
-  - name: Inventory
-    description: QuickBooks Inventory Items and eligible supporting Accounts.
-  - name: Customers
-    description: Active QuickBooks Customer list records.
-  - name: Vendors
-    description: Active QuickBooks Vendor list records.
-  - name: Sales
-    description: QuickBooks Invoices and customer Payments applied to open Invoices.
-  - name: Payables
-    description: QuickBooks Bills and check-style BillPayments applied to open Bills.
+- name: System
+  description: Application liveness.
+- name: Accounts
+  description: Eligible active QuickBooks Accounts for Journal Entry lines.
+- name: Financial Reports
+  description: Read-only statements calculated by QuickBooks from existing sandbox accounting data.
+- name: Journal Entries
+  description: Balanced QuickBooks sandbox financial records.
+- name: Workforce
+  description: Payroll-adjacent Employee records and employee TimeActivities; not payroll processing.
+- name: Tax Configuration
+  description: QuickBooks TaxCodes, TaxRates, and TaxAgencies with controlled TaxCode creation.
+- name: Inventory
+  description: QuickBooks Inventory Items and eligible supporting Accounts.
+- name: Customers
+  description: Active QuickBooks Customer list records.
+- name: Vendors
+  description: Active QuickBooks Vendor list records.
+- name: Sales
+  description: QuickBooks Invoices and customer Payments applied to open Invoices.
+- name: Payables
+  description: QuickBooks Bills and check-style BillPayments applied to open Bills.
 paths:
-  /health:
+  "/health":
     get:
       operationId: getHealth
       summary: Check application liveness
       description: Returns a stable JSON response when the Rails application can serve requests.
-      tags: [System]
+      tags:
+      - System
       responses:
         '200':
           description: Rails is serving requests.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HealthResponse'
+                "$ref": "#/components/schemas/HealthResponse"
               example:
                 status: ok
-  /api/v1/quickbooks/connections/{connection_id}/accounts:
+  "/api/v1/quickbooks/connections/{connection_id}/accounts":
     get:
       operationId: listEligibleAccounts
       summary: List eligible QuickBooks Accounts
       description: |
         Returns active Accounts that may be selected for the simple Journal Entry flow. Accounts Receivable
         and Accounts Payable are excluded.
-      tags: [Accounts]
+      tags:
+      - Accounts
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Eligible active Accounts, sorted by display name.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AccountsResponse'
+                "$ref": "#/components/schemas/AccountsResponse"
               example:
                 accounts:
-                  - id: '35'
-                    name: Checking
-                    display_name: Checking
-                    account_type: Bank
-                    account_subtype: Checking
-                    classification: Asset
+                - id: '35'
+                  name: Checking
+                  display_name: Checking
+                  account_type: Bank
+                  account_subtype: Checking
+                  classification: Asset
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/reports/profit_and_loss:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/reports/profit_and_loss":
     get:
       operationId: getProfitAndLoss
       summary: Get a QuickBooks Profit & Loss statement
       description: |
         Returns a normalized read-only Profit & Loss report for an inclusive period of at most six calendar
         months. QuickBooks calculates all values; Rails preserves ordered rows and decimal amount strings.
-      tags: [Financial Reports]
+      tags:
+      - Financial Reports
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/ReportStartDate'
-        - $ref: '#/components/parameters/ReportEndDate'
-        - $ref: '#/components/parameters/AccountingMethod'
+      - "$ref": "#/components/parameters/ConnectionId"
+      - "$ref": "#/components/parameters/ReportStartDate"
+      - "$ref": "#/components/parameters/ReportEndDate"
+      - "$ref": "#/components/parameters/AccountingMethod"
       responses:
         '200':
           description: QuickBooks Profit & Loss statement.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FinancialReportResponse'
+                "$ref": "#/components/schemas/FinancialReportResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/reports/balance_sheet:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/reports/balance_sheet":
     get:
       operationId: getBalanceSheet
       summary: Get a QuickBooks Balance Sheet
       description: |
         Returns a normalized read-only Balance Sheet as of one ISO 8601 date. Rails sends `as_of_date` to
         QuickBooks as the native report `end_date`; QuickBooks calculates all values.
-      tags: [Financial Reports]
+      tags:
+      - Financial Reports
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/ReportAsOfDate'
-        - $ref: '#/components/parameters/AccountingMethod'
+      - "$ref": "#/components/parameters/ConnectionId"
+      - "$ref": "#/components/parameters/ReportAsOfDate"
+      - "$ref": "#/components/parameters/AccountingMethod"
       responses:
         '200':
           description: QuickBooks Balance Sheet.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FinancialReportResponse'
+                "$ref": "#/components/schemas/FinancialReportResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/reports/cash_flow:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/reports/cash_flow":
     get:
       operationId: getCashFlow
       summary: Get a QuickBooks Cash Flow statement
       description: |
         Returns a normalized read-only Cash Flow statement for an inclusive period of at most six calendar
         months. The QuickBooks Cash Flow contract neither accepts `accounting_method` nor returns `ReportBasis`.
-      tags: [Financial Reports]
+      tags:
+      - Financial Reports
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/ReportStartDate'
-        - $ref: '#/components/parameters/ReportEndDate'
+      - "$ref": "#/components/parameters/ConnectionId"
+      - "$ref": "#/components/parameters/ReportStartDate"
+      - "$ref": "#/components/parameters/ReportEndDate"
       responses:
         '200':
           description: QuickBooks Cash Flow statement.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FinancialReportResponse'
+                "$ref": "#/components/schemas/FinancialReportResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/journal_entries:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/journal_entries":
     get:
       operationId: listJournalEntries
       summary: List QuickBooks Journal Entries
@@ -210,59 +214,54 @@ paths:
         Returns one bounded page of Journal Entries from the connected QuickBooks sandbox. Optional inclusive
         transaction-date filters are sent to QuickBooks. Results are ordered by transaction date and QuickBooks
         ID descending so STARTPOSITION pagination has a deterministic order.
-      tags: [Journal Entries]
+      tags:
+      - Journal Entries
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/TxnDateFrom'
-        - $ref: '#/components/parameters/TxnDateTo'
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PerPage'
+      - "$ref": "#/components/parameters/ConnectionId"
+      - "$ref": "#/components/parameters/TxnDateFrom"
+      - "$ref": "#/components/parameters/TxnDateTo"
+      - "$ref": "#/components/parameters/Page"
+      - "$ref": "#/components/parameters/PerPage"
       responses:
         '200':
           description: Journal Entries sorted newest first.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JournalEntriesResponse'
+                "$ref": "#/components/schemas/JournalEntriesResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createJournalEntry
       summary: Create one balanced QuickBooks Journal Entry
-      description: |
-        Reserves the connection-scoped Idempotency-Key in the local audit ledger, creates equal positive debit
-        and credit lines with that UUID forwarded to Intuit as requestid, and reads the Journal Entry back from
-        QuickBooks before returning HTTP 201. Repeating a completed key with identical canonical input returns
-        the stored result with HTTP 200 and does not call QuickBooks. Reusing a key with different input, or a
-        key whose earlier outcome is unresolved, returns HTTP 409 without a new QuickBooks POST. This operation
-        creates a real sandbox transaction and is not enabled in Swagger UI.
-      tags: [Journal Entries]
+      description: |-
+        Creates one real QuickBooks sandbox balanced Journal Entry through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Journal Entries
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateJournalEntryRequest'
+              "$ref": "#/components/schemas/CreateJournalEntryRequest"
             example:
               journal_entry:
                 txn_date: '2026-07-15'
@@ -271,420 +270,333 @@ paths:
                 debit_account_id: '35'
                 credit_account_id: '79'
       responses:
-        '200':
-          description: A previously completed identical request was replayed from the local audit ledger; QuickBooks was not called.
-          headers:
-            Idempotency-Replayed:
-              description: Always `true` for a replayed response.
-              schema:
-                type: string
-                enum: ['true']
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JournalEntryResponse'
         '201':
-          description: Journal Entry created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              description: Always `false` for a newly completed request.
-              schema:
-                type: string
-                enum: ['false']
+          description: balanced Journal Entry created and verified by QuickBooks readback.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JournalEntryResponse'
+                "$ref": "#/components/schemas/JournalEntryResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/journal_entry_operations:
-    get:
-      operationId: listJournalEntryOperations
-      summary: List local Journal Entry submission operations
-      description: |
-        Returns one bounded page of connection-scoped audit operations from PostgreSQL, newest submission first.
-        Optional inclusive filters use the original Journal Entry transaction date. This endpoint does not call
-        QuickBooks and does not expose idempotency keys, request digests, OAuth tokens, or raw vendor responses.
-      tags: [Audit History]
-      parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/TxnDateFrom'
-        - $ref: '#/components/parameters/TxnDateTo'
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/PerPage'
-      responses:
-        '200':
-          description: Local Journal Entry operations sorted newest first.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JournalEntryOperationsResponse'
-              example:
-                journal_entry_operations:
-                  - id: 1
-                    status: succeeded
-                    txn_date: '2026-01-15'
-                    memo: Quarter-end adjustment
-                    amount: '25.00'
-                    debit_account_id: '1001'
-                    credit_account_id: '1002'
-                    quickbooks_journal_entry_id: '12345'
-                    error_code: null
-                    created_at: '2026-01-15T15:18:00.000+05:30'
-                    completed_at: '2026-01-15T15:18:00.000+05:30'
-                pagination:
-                  page: 1
-                  per_page: 50
-                  returned_count: 1
-                  has_more: false
-                  next_page: null
-                filters:
-                  txn_date_from: null
-                  txn_date_to: null
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/UnprocessableEntity'
-  /api/v1/quickbooks/connections/{connection_id}/employees:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/employees":
     get:
       operationId: listEmployees
       summary: List active QuickBooks Employees
       description: |
         Returns active public Accounting API Employee records. This is workforce directory data and does not
         expose compensation, SSN, payroll runs, paychecks, deductions, or tax filings.
-      tags: [Workforce]
+      tags:
+      - Workforce
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Active Employees sorted by display name.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EmployeesResponse'
+                "$ref": "#/components/schemas/EmployeesResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createEmployee
       summary: Create one limited QuickBooks Employee record
-      description: |
-        Creates names plus optional email/phone only, then reads the Employee back before success. A new request
-        is audited locally and forwards the UUID to Intuit as requestid. A matching completed key is replayed
-        locally; conflicting or unresolved reuse returns HTTP 409. This does not enroll or pay the Employee and
-        is not executable from Swagger UI.
-      tags: [Workforce]
+      description: |-
+        Creates one real QuickBooks sandbox Employee through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Workforce
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateEmployeeRequest'
+              "$ref": "#/components/schemas/CreateEmployeeRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedEmployee'
         '201':
           description: Employee created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EmployeeResponse'
+                "$ref": "#/components/schemas/EmployeeResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/time_activities:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/time_activities":
     get:
       operationId: listEmployeeTimeActivities
       summary: List recent QuickBooks employee TimeActivities
       description: Returns up to 100 employee TimeActivities ordered by transaction date descending.
-      tags: [Workforce]
+      tags:
+      - Workforce
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Recent employee TimeActivities.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TimeActivitiesResponse'
+                "$ref": "#/components/schemas/TimeActivitiesResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createEmployeeTimeActivity
       summary: Create one employee TimeActivity
-      description: |
-        Validates an active Employee, ISO work date, whole hours/minutes, and description; creates the
-        TimeActivity and verifies it by readback. It records time only and does not calculate payroll or invoice
-        a customer. The audited/idempotent sandbox write is not executable from Swagger UI.
-      tags: [Workforce]
+      description: |-
+        Creates one real QuickBooks sandbox employee TimeActivity through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Workforce
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTimeActivityRequest'
+              "$ref": "#/components/schemas/CreateTimeActivityRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedTimeActivity'
         '201':
-          description: TimeActivity created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
+          description: employee TimeActivity created and verified by QuickBooks readback.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TimeActivityResponse'
+                "$ref": "#/components/schemas/TimeActivityResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/tax_codes:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/tax_codes":
     get:
       operationId: listTaxConfiguration
       summary: List QuickBooks TaxCodes, TaxRates, and TaxAgencies
       description: Returns the sandbox tax configuration needed to review codes and select an existing rate.
-      tags: [Tax Configuration]
+      tags:
+      - Tax Configuration
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: TaxCode, TaxRate, and TaxAgency catalog.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaxCatalogResponse'
+                "$ref": "#/components/schemas/TaxCatalogResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createTaxCode
       summary: Create one TaxCode from an existing TaxRate
-      description: |
-        Creates a unique TaxCode for Sales or Purchase using one existing active TaxRate through TaxService. The
-        selected rate's current TaxAgency must advertise the matching sales or purchase tracking capability.
-        Rails then queries the TaxCode back and verifies the returned rate list. It does not create a rate/agency,
-        calculate transaction tax, file a return, or make a tax payment. The audited/idempotent sandbox write is
-        not executable from Swagger UI.
-      tags: [Tax Configuration]
+      description: |-
+        Creates one real QuickBooks sandbox TaxCode through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Tax Configuration
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTaxCodeRequest'
+              "$ref": "#/components/schemas/CreateTaxCodeRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedTaxCode'
         '201':
           description: TaxCode created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaxCodeResponse'
+                "$ref": "#/components/schemas/TaxCodeResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/inventory_items:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/inventory_items":
     get:
       operationId: listInventoryItems
       summary: List Inventory Items and eligible Accounts
       description: |
         Returns QuickBooks Inventory Items plus eligible sales-income, cost-of-goods-sold, and inventory-asset
         Accounts required by the controlled create operation.
-      tags: [Inventory]
+      tags:
+      - Inventory
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Inventory Items and account choices.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InventoryCatalogResponse'
+                "$ref": "#/components/schemas/InventoryCatalogResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createInventoryItem
       summary: Create one QuickBooks Inventory Item
-      description: |
-        Creates one Inventory Item using a unique name, ISO start date, decimal-safe quantity/cost/price, and
-        freshly validated eligible Accounts, then verifies it by readback. Positive opening quantity and cost can
-        change inventory value. The audited/idempotent sandbox write is not executable from Swagger UI.
-      tags: [Inventory]
+      description: |-
+        Creates one real QuickBooks sandbox Inventory Item through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Inventory
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateInventoryItemRequest'
+              "$ref": "#/components/schemas/CreateInventoryItemRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedInventoryItem'
         '201':
           description: Inventory Item created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InventoryItemResponse'
+                "$ref": "#/components/schemas/InventoryItemResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/reports/general_ledger:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/reports/general_ledger":
     get:
       operationId: getGeneralLedger
       summary: Get a QuickBooks General Ledger
@@ -692,510 +604,499 @@ paths:
         Returns QuickBooks GeneralLedger rows for an inclusive period of at most six calendar months.
         QuickBooks calculates the read-only report; Rails preserves its rows and decimal values without
         recalculating or storing them.
-      tags: [Financial Reports]
+      tags:
+      - Financial Reports
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/ReportStartDate'
-        - $ref: '#/components/parameters/ReportEndDate'
-        - $ref: '#/components/parameters/AccountingMethod'
+      - "$ref": "#/components/parameters/ConnectionId"
+      - "$ref": "#/components/parameters/ReportStartDate"
+      - "$ref": "#/components/parameters/ReportEndDate"
+      - "$ref": "#/components/parameters/AccountingMethod"
       responses:
         '200':
           description: QuickBooks General Ledger report.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FinancialReportResponse'
+                "$ref": "#/components/schemas/FinancialReportResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/reports/trial_balance:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/reports/trial_balance":
     get:
       operationId: getTrialBalance
       summary: Get a QuickBooks Trial Balance
       description: |
         Returns the read-only QuickBooks TrialBalance report for an inclusive period of at most six calendar
         months. Debit and credit values remain QuickBooks-provided decimal strings.
-      tags: [Financial Reports]
+      tags:
+      - Financial Reports
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/ReportStartDate'
-        - $ref: '#/components/parameters/ReportEndDate'
-        - $ref: '#/components/parameters/AccountingMethod'
+      - "$ref": "#/components/parameters/ConnectionId"
+      - "$ref": "#/components/parameters/ReportStartDate"
+      - "$ref": "#/components/parameters/ReportEndDate"
+      - "$ref": "#/components/parameters/AccountingMethod"
       responses:
         '200':
           description: QuickBooks Trial Balance report.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FinancialReportResponse'
+                "$ref": "#/components/schemas/FinancialReportResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '403':
-          $ref: '#/components/responses/Forbidden'
+          "$ref": "#/components/responses/Forbidden"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/customers:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/customers":
     get:
       operationId: listCustomers
       summary: List active QuickBooks Customers
-      tags: [Customers]
+      tags:
+      - Customers
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Active Customers sorted by display name.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomersResponse'
+                "$ref": "#/components/schemas/CustomersResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createCustomer
       summary: Create one QuickBooks Customer
-      description: Creates one active non-posting list record, then verifies it by readback.
-      tags: [Customers]
+      description: |-
+        Creates one real QuickBooks sandbox Customer through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Customers
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateCustomerRequest'
+              "$ref": "#/components/schemas/CreateCustomerRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedCustomer'
         '201':
           description: Customer created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerResponse'
+                "$ref": "#/components/schemas/CustomerResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/vendors:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/vendors":
     get:
       operationId: listVendors
       summary: List active QuickBooks Vendors
-      tags: [Vendors]
+      tags:
+      - Vendors
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Active Vendors sorted by display name.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VendorsResponse'
+                "$ref": "#/components/schemas/VendorsResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createVendor
       summary: Create one QuickBooks Vendor
-      description: Creates one active non-posting list record, then verifies it by readback.
-      tags: [Vendors]
+      description: |-
+        Creates one real QuickBooks sandbox Vendor through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Vendors
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateVendorRequest'
+              "$ref": "#/components/schemas/CreateVendorRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedVendor'
         '201':
           description: Vendor created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VendorResponse'
+                "$ref": "#/components/schemas/VendorResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/invoices:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/invoices":
     get:
       operationId: listInvoices
       summary: List Invoices and create choices
       description: Returns Invoices plus active Customer and sales Item choices required for one-line creation.
-      tags: [Sales]
+      tags:
+      - Sales
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Invoices and active reference choices.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InvoiceCatalogResponse'
+                "$ref": "#/components/schemas/InvoiceCatalogResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createInvoice
       summary: Create one one-line QuickBooks Invoice
-      description: Creates a real sandbox sale and receivable, then verifies the Customer, dates, Item, and amount.
-      tags: [Sales]
+      description: |-
+        Creates one real QuickBooks sandbox Invoice through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Sales
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateInvoiceRequest'
+              "$ref": "#/components/schemas/CreateInvoiceRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedInvoice'
         '201':
           description: Invoice created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InvoiceResponse'
+                "$ref": "#/components/schemas/InvoiceResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/bills:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/bills":
     get:
       operationId: listBills
       summary: List Bills and create choices
       description: Returns Bills plus active Vendor, expense Account, and Accounts Payable choices.
-      tags: [Payables]
+      tags:
+      - Payables
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Bills and active reference choices.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BillCatalogResponse'
+                "$ref": "#/components/schemas/BillCatalogResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createBill
       summary: Create one one-line QuickBooks Bill
-      description: Creates a real sandbox expense and payable, then verifies the Vendor, Accounts, dates, and amount.
-      tags: [Payables]
+      description: |-
+        Creates one real QuickBooks sandbox Bill through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Payables
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateBillRequest'
+              "$ref": "#/components/schemas/CreateBillRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedBill'
         '201':
           description: Bill created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BillResponse'
+                "$ref": "#/components/schemas/BillResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/customer_payments:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/customer_payments":
     get:
       operationId: listCustomerPayments
       summary: List customer Payments and open Invoices
-      tags: [Sales]
+      tags:
+      - Sales
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: Customer Payments and open Invoice choices.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerPaymentCatalogResponse'
+                "$ref": "#/components/schemas/CustomerPaymentCatalogResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createCustomerPayment
       summary: Apply one customer Payment to one open Invoice
-      description: Creates a real sandbox Payment no greater than the current Invoice balance and verifies its link.
-      tags: [Sales]
+      description: |-
+        Creates one real QuickBooks sandbox Customer Payment through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Sales
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateCustomerPaymentRequest'
+              "$ref": "#/components/schemas/CreateCustomerPaymentRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedCustomerPayment'
         '201':
           description: Customer Payment created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerPaymentResponse'
+                "$ref": "#/components/schemas/CustomerPaymentResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
-  /api/v1/quickbooks/connections/{connection_id}/bill_payments:
+          "$ref": "#/components/responses/Timeout"
+  "/api/v1/quickbooks/connections/{connection_id}/bill_payments":
     get:
       operationId: listBillPayments
       summary: List BillPayments, open Bills, and bank Accounts
-      tags: [Payables]
+      tags:
+      - Payables
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
+      - "$ref": "#/components/parameters/ConnectionId"
       responses:
         '200':
           description: BillPayments and active create choices.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BillPaymentCatalogResponse'
+                "$ref": "#/components/schemas/BillPaymentCatalogResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
     post:
       operationId: createBillPayment
       summary: Apply one check-style BillPayment to one open Bill
-      description: Creates a real sandbox BillPayment from one active bank Account and verifies its link.
-      tags: [Payables]
+      description: |-
+        Creates one real QuickBooks sandbox Bill Payment through Rails. Rails allowlists and validates the input,
+        performs the matching QuickBooks create call, reads the record back, verifies the response, and returns HTTP
+        201. Repeating Execute is a separate create operation and may create another record.
+      tags:
+      - Payables
       parameters:
-        - $ref: '#/components/parameters/ConnectionId'
-        - $ref: '#/components/parameters/IdempotencyKey'
-      security:
-        - railsSession: []
-          csrfToken: []
+      - "$ref": "#/components/parameters/ConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateBillPaymentRequest'
+              "$ref": "#/components/schemas/CreateBillPaymentRequest"
       responses:
-        '200':
-          $ref: '#/components/responses/ReplayedBillPayment'
         '201':
-          description: BillPayment created and verified by QuickBooks readback.
-          headers:
-            Idempotency-Replayed:
-              $ref: '#/components/headers/IdempotencyNotReplayed'
+          description: Bill Payment created and verified by QuickBooks readback.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BillPaymentResponse'
+                "$ref": "#/components/schemas/BillPaymentResponse"
+        '400':
+          "$ref": "#/components/responses/BadRequest"
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          "$ref": "#/components/responses/Unauthorized"
         '404':
-          $ref: '#/components/responses/NotFound'
+          "$ref": "#/components/responses/NotFound"
         '409':
-          $ref: '#/components/responses/Conflict'
+          "$ref": "#/components/responses/Conflict"
         '422':
-          $ref: '#/components/responses/UnprocessableEntity'
+          "$ref": "#/components/responses/UnprocessableEntity"
         '429':
-          $ref: '#/components/responses/RateLimited'
+          "$ref": "#/components/responses/RateLimited"
         '502':
-          $ref: '#/components/responses/BadGateway'
+          "$ref": "#/components/responses/BadGateway"
         '503':
-          $ref: '#/components/responses/Unavailable'
+          "$ref": "#/components/responses/Unavailable"
         '504':
-          $ref: '#/components/responses/Timeout'
+          "$ref": "#/components/responses/Timeout"
 components:
   parameters:
     ConnectionId:
       name: connection_id
       in: path
       required: true
-      description: Local database ID of the encrypted QuickBooks connection.
+      description: Session-owned opaque UUID for the QuickBooks connection held only in this Rails process.
       schema:
-        type: integer
-        format: int64
-        minimum: 1
+        type: string
+        format: uuid
     TxnDateFrom:
       name: txn_date_from
       in: query
@@ -1239,7 +1140,9 @@ components:
       description: Accounting basis for all supported reports except Cash Flow. Defaults to Accrual.
       schema:
         type: string
-        enum: [Cash, Accrual]
+        enum:
+        - Cash
+        - Accrual
         default: Accrual
     TxnDateTo:
       name: txn_date_to
@@ -1269,53 +1172,27 @@ components:
         minimum: 1
         maximum: 50
         default: 50
-    IdempotencyKey:
-      name: Idempotency-Key
-      in: header
-      required: true
-      description: |
-        A caller-generated UUID for one intended create operation. It is unique within the selected connection
-        and is also sent to Intuit as requestid. Preserve the same key when the outcome is unknown; use a new key
-        only for a deliberately new or corrected record.
-      schema:
-        type: string
-        format: uuid
-        maxLength: 50
-  headers:
-    IdempotencyReplayed:
-      description: Always `true` for a replayed response.
-      schema:
-        type: string
-        enum: ['true']
-    IdempotencyNotReplayed:
-      description: Always `false` for a newly completed request.
-      schema:
-        type: string
-        enum: ['false']
-  securitySchemes:
-    railsSession:
-      type: apiKey
-      in: cookie
-      name: _qbo_finance_bridge_session
-      description: Browser-managed same-origin Rails session cookie.
-    csrfToken:
-      type: apiKey
-      in: header
-      name: X-CSRF-Token
-      description: Rails authenticity token required for POST requests.
   schemas:
     HealthResponse:
       type: object
       additionalProperties: false
-      required: [status]
+      required:
+      - status
       properties:
         status:
           type: string
-          enum: [ok]
+          enum:
+          - ok
     Account:
       type: object
       additionalProperties: false
-      required: [id, name, display_name, account_type, account_subtype, classification]
+      required:
+      - id
+      - name
+      - display_name
+      - account_type
+      - account_subtype
+      - classification
       properties:
         id:
           type: string
@@ -1335,16 +1212,24 @@ components:
     AccountsResponse:
       type: object
       additionalProperties: false
-      required: [accounts]
+      required:
+      - accounts
       properties:
         accounts:
           type: array
           items:
-            $ref: '#/components/schemas/Account'
+            "$ref": "#/components/schemas/Account"
     Employee:
       type: object
       additionalProperties: false
-      required: [id, display_name, given_name, family_name, email, phone, active]
+      required:
+      - id
+      - display_name
+      - given_name
+      - family_name
+      - email
+      - phone
+      - active
       properties:
         id:
           type: string
@@ -1367,41 +1252,49 @@ components:
     EmployeesResponse:
       type: object
       additionalProperties: false
-      required: [employees, capabilities]
+      required:
+      - employees
+      - capabilities
       properties:
         employees:
           type: array
           items:
-            $ref: '#/components/schemas/Employee'
+            "$ref": "#/components/schemas/Employee"
         capabilities:
           type: object
           additionalProperties: false
-          required: [employee_records, full_payroll]
+          required:
+          - employee_records
+          - full_payroll
           properties:
             employee_records:
               type: boolean
-              enum: [true]
+              enum:
+              - true
             full_payroll:
               type: boolean
-              enum: [false]
+              enum:
+              - false
     EmployeeResponse:
       type: object
       additionalProperties: false
-      required: [employee, idempotency]
+      required:
+      - employee
       properties:
         employee:
-          $ref: '#/components/schemas/Employee'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/Employee"
     CreateEmployeeRequest:
       type: object
       additionalProperties: false
-      required: [employee]
+      required:
+      - employee
       properties:
         employee:
           type: object
           additionalProperties: false
-          required: [given_name, family_name]
+          required:
+          - given_name
+          - family_name
           properties:
             given_name:
               type: string
@@ -1421,7 +1314,14 @@ components:
     TimeActivity:
       type: object
       additionalProperties: false
-      required: [id, txn_date, employee_id, employee_name, hours, minutes, description]
+      required:
+      - id
+      - txn_date
+      - employee_id
+      - employee_name
+      - hours
+      - minutes
+      - description
       properties:
         id:
           type: string
@@ -1447,31 +1347,37 @@ components:
     TimeActivitiesResponse:
       type: object
       additionalProperties: false
-      required: [time_activities]
+      required:
+      - time_activities
       properties:
         time_activities:
           type: array
           maxItems: 100
           items:
-            $ref: '#/components/schemas/TimeActivity'
+            "$ref": "#/components/schemas/TimeActivity"
     TimeActivityResponse:
       type: object
       additionalProperties: false
-      required: [time_activity, idempotency]
+      required:
+      - time_activity
       properties:
         time_activity:
-          $ref: '#/components/schemas/TimeActivity'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/TimeActivity"
     CreateTimeActivityRequest:
       type: object
       additionalProperties: false
-      required: [time_activity]
+      required:
+      - time_activity
       properties:
         time_activity:
           type: object
           additionalProperties: false
-          required: [employee_id, txn_date, hours, minutes, description]
+          required:
+          - employee_id
+          - txn_date
+          - hours
+          - minutes
+          - description
           properties:
             employee_id:
               type: string
@@ -1493,7 +1399,14 @@ components:
     TaxCode:
       type: object
       additionalProperties: false
-      required: [id, name, description, taxable, active, sales_rate_ids, purchase_rate_ids]
+      required:
+      - id
+      - name
+      - description
+      - taxable
+      - active
+      - sales_rate_ids
+      - purchase_rate_ids
       properties:
         id:
           type: string
@@ -1518,7 +1431,14 @@ components:
     TaxRate:
       type: object
       additionalProperties: false
-      required: [id, name, description, rate_value, agency_id, agency_name, active]
+      required:
+      - id
+      - name
+      - description
+      - rate_value
+      - agency_id
+      - agency_name
+      - active
       properties:
         id:
           type: string
@@ -1529,7 +1449,7 @@ components:
           nullable: true
         rate_value:
           type: string
-          pattern: '^\d+(\.\d+)?$'
+          pattern: "^\\d+(\\.\\d+)?$"
           description: Decimal percentage string; never a JSON floating-point number.
         agency_id:
           type: string
@@ -1541,7 +1461,11 @@ components:
     TaxAgency:
       type: object
       additionalProperties: false
-      required: [id, display_name, tracks_sales, tracks_purchases]
+      required:
+      - id
+      - display_name
+      - tracks_sales
+      - tracks_purchases
       properties:
         id:
           type: string
@@ -1556,38 +1480,44 @@ components:
     TaxCatalogResponse:
       type: object
       additionalProperties: false
-      required: [tax_codes, tax_rates, tax_agencies]
+      required:
+      - tax_codes
+      - tax_rates
+      - tax_agencies
       properties:
         tax_codes:
           type: array
           items:
-            $ref: '#/components/schemas/TaxCode'
+            "$ref": "#/components/schemas/TaxCode"
         tax_rates:
           type: array
           items:
-            $ref: '#/components/schemas/TaxRate'
+            "$ref": "#/components/schemas/TaxRate"
         tax_agencies:
           type: array
           items:
-            $ref: '#/components/schemas/TaxAgency'
+            "$ref": "#/components/schemas/TaxAgency"
     TaxCodeResponse:
       type: object
       additionalProperties: false
-      required: [tax_code, idempotency]
+      required:
+      - tax_code
       properties:
         tax_code:
-          $ref: '#/components/schemas/TaxCode'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/TaxCode"
     CreateTaxCodeRequest:
       type: object
       additionalProperties: false
-      required: [tax_code]
+      required:
+      - tax_code
       properties:
         tax_code:
           type: object
           additionalProperties: false
-          required: [name, tax_rate_id, applicable_on]
+          required:
+          - name
+          - tax_rate_id
+          - applicable_on
           properties:
             name:
               type: string
@@ -1598,24 +1528,26 @@ components:
               description: ID of an active TaxRate whose TaxAgency supports the requested applicability.
             applicable_on:
               type: string
-              enum: [Sales, Purchase]
+              enum:
+              - Sales
+              - Purchase
               description: Must match the selected TaxRate agency's advertised tracking capability.
     InventoryItem:
       type: object
       additionalProperties: false
       required:
-        - id
-        - name
-        - sku
-        - description
-        - quantity_on_hand
-        - unit_price
-        - purchase_cost
-        - inventory_start_date
-        - income_account_id
-        - expense_account_id
-        - asset_account_id
-        - active
+      - id
+      - name
+      - sku
+      - description
+      - quantity_on_hand
+      - unit_price
+      - purchase_cost
+      - inventory_start_date
+      - income_account_id
+      - expense_account_id
+      - asset_account_id
+      - active
       properties:
         id:
           type: string
@@ -1630,16 +1562,16 @@ components:
           nullable: true
         quantity_on_hand:
           type: string
-          pattern: '^\d+(\.\d+)?$'
+          pattern: "^\\d+(\\.\\d+)?$"
           description: Decimal quantity string; never a JSON floating-point number.
         unit_price:
           type: string
           nullable: true
-          pattern: '^\d+(\.\d+)?$'
+          pattern: "^\\d+(\\.\\d+)?$"
         purchase_cost:
           type: string
           nullable: true
-          pattern: '^\d+(\.\d+)?$'
+          pattern: "^\\d+(\\.\\d+)?$"
         inventory_start_date:
           type: string
           format: date
@@ -1655,7 +1587,9 @@ components:
     InventoryAccountChoice:
       type: object
       additionalProperties: false
-      required: [id, display_name]
+      required:
+      - id
+      - display_name
       properties:
         id:
           type: string
@@ -1664,53 +1598,58 @@ components:
     InventoryCatalogResponse:
       type: object
       additionalProperties: false
-      required: [inventory_items, account_choices]
+      required:
+      - inventory_items
+      - account_choices
       properties:
         inventory_items:
           type: array
           items:
-            $ref: '#/components/schemas/InventoryItem'
+            "$ref": "#/components/schemas/InventoryItem"
         account_choices:
           type: object
           additionalProperties: false
-          required: [income, expense, asset]
+          required:
+          - income
+          - expense
+          - asset
           properties:
             income:
               type: array
               items:
-                $ref: '#/components/schemas/InventoryAccountChoice'
+                "$ref": "#/components/schemas/InventoryAccountChoice"
             expense:
               type: array
               items:
-                $ref: '#/components/schemas/InventoryAccountChoice'
+                "$ref": "#/components/schemas/InventoryAccountChoice"
             asset:
               type: array
               items:
-                $ref: '#/components/schemas/InventoryAccountChoice'
+                "$ref": "#/components/schemas/InventoryAccountChoice"
     InventoryItemResponse:
       type: object
       additionalProperties: false
-      required: [inventory_item, idempotency]
+      required:
+      - inventory_item
       properties:
         inventory_item:
-          $ref: '#/components/schemas/InventoryItem'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/InventoryItem"
     CreateInventoryItemRequest:
       type: object
       additionalProperties: false
-      required: [inventory_item]
+      required:
+      - inventory_item
       properties:
         inventory_item:
           type: object
           additionalProperties: false
           required:
-            - name
-            - inventory_start_date
-            - quantity_on_hand
-            - income_account_id
-            - expense_account_id
-            - asset_account_id
+          - name
+          - inventory_start_date
+          - quantity_on_hand
+          - income_account_id
+          - expense_account_id
+          - asset_account_id
           properties:
             name:
               type: string
@@ -1727,13 +1666,13 @@ components:
               format: date
             quantity_on_hand:
               type: string
-              pattern: '^\d{1,12}(\.\d{1,5})?$'
+              pattern: "^\\d{1,12}(\\.\\d{1,5})?$"
             unit_price:
               type: string
-              pattern: '^\d{1,11}(\.\d{1,2})?$'
+              pattern: "^\\d{1,11}(\\.\\d{1,2})?$"
             purchase_cost:
               type: string
-              pattern: '^\d{1,11}(\.\d{1,2})?$'
+              pattern: "^\\d{1,11}(\\.\\d{1,2})?$"
             income_account_id:
               type: string
             expense_account_id:
@@ -1743,7 +1682,14 @@ components:
     Customer:
       type: object
       additionalProperties: false
-      required: [id, display_name, company_name, email, phone, balance, active]
+      required:
+      - id
+      - display_name
+      - company_name
+      - email
+      - phone
+      - balance
+      - active
       properties:
         id:
           type: string
@@ -1762,39 +1708,42 @@ components:
           nullable: true
         balance:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
           description: QuickBooks-provided decimal string.
         active:
           type: boolean
-          enum: [true]
+          enum:
+          - true
     CustomersResponse:
       type: object
       additionalProperties: false
-      required: [customers]
+      required:
+      - customers
       properties:
         customers:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/Customer'
+            "$ref": "#/components/schemas/Customer"
     CustomerResponse:
       type: object
       additionalProperties: false
-      required: [customer, idempotency]
+      required:
+      - customer
       properties:
         customer:
-          $ref: '#/components/schemas/Customer'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/Customer"
     CreateCustomerRequest:
       type: object
       additionalProperties: false
-      required: [customer]
+      required:
+      - customer
       properties:
         customer:
           type: object
           additionalProperties: false
-          required: [display_name]
+          required:
+          - display_name
           properties:
             display_name:
               type: string
@@ -1813,7 +1762,14 @@ components:
     Vendor:
       type: object
       additionalProperties: false
-      required: [id, display_name, company_name, email, phone, balance, active]
+      required:
+      - id
+      - display_name
+      - company_name
+      - email
+      - phone
+      - balance
+      - active
       properties:
         id:
           type: string
@@ -1832,39 +1788,42 @@ components:
           nullable: true
         balance:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
           description: QuickBooks-provided decimal string.
         active:
           type: boolean
-          enum: [true]
+          enum:
+          - true
     VendorsResponse:
       type: object
       additionalProperties: false
-      required: [vendors]
+      required:
+      - vendors
       properties:
         vendors:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/Vendor'
+            "$ref": "#/components/schemas/Vendor"
     VendorResponse:
       type: object
       additionalProperties: false
-      required: [vendor, idempotency]
+      required:
+      - vendor
       properties:
         vendor:
-          $ref: '#/components/schemas/Vendor'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/Vendor"
     CreateVendorRequest:
       type: object
       additionalProperties: false
-      required: [vendor]
+      required:
+      - vendor
       properties:
         vendor:
           type: object
           additionalProperties: false
-          required: [display_name]
+          required:
+          - display_name
           properties:
             display_name:
               type: string
@@ -1883,7 +1842,9 @@ components:
     CustomerChoice:
       type: object
       additionalProperties: false
-      required: [id, display_name]
+      required:
+      - id
+      - display_name
       properties:
         id:
           type: string
@@ -1892,7 +1853,9 @@ components:
     VendorChoice:
       type: object
       additionalProperties: false
-      required: [id, display_name]
+      required:
+      - id
+      - display_name
       properties:
         id:
           type: string
@@ -1901,7 +1864,10 @@ components:
     SalesItemChoice:
       type: object
       additionalProperties: false
-      required: [id, name, item_type]
+      required:
+      - id
+      - name
+      - item_type
       properties:
         id:
           type: string
@@ -1909,11 +1875,16 @@ components:
           type: string
         item_type:
           type: string
-          enum: [Inventory, NonInventory, Service]
+          enum:
+          - Inventory
+          - NonInventory
+          - Service
     AccountChoice:
       type: object
       additionalProperties: false
-      required: [id, display_name]
+      required:
+      - id
+      - display_name
       properties:
         id:
           type: string
@@ -1922,14 +1893,18 @@ components:
     InvoiceLine:
       type: object
       additionalProperties: false
-      required: [description, amount, item_id, item_name]
+      required:
+      - description
+      - amount
+      - item_id
+      - item_name
       properties:
         description:
           type: string
           nullable: true
         amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         item_id:
           type: string
         item_name:
@@ -1939,15 +1914,15 @@ components:
       type: object
       additionalProperties: false
       required:
-        - id
-        - doc_number
-        - txn_date
-        - due_date
-        - customer_id
-        - customer_name
-        - total_amount
-        - balance
-        - lines
+      - id
+      - doc_number
+      - txn_date
+      - due_date
+      - customer_id
+      - customer_name
+      - total_amount
+      - balance
+      - lines
       properties:
         id:
           type: string
@@ -1967,52 +1942,61 @@ components:
           nullable: true
         total_amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         balance:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         lines:
           type: array
           items:
-            $ref: '#/components/schemas/InvoiceLine'
+            "$ref": "#/components/schemas/InvoiceLine"
     InvoiceCatalogResponse:
       type: object
       additionalProperties: false
-      required: [invoices, customer_choices, item_choices]
+      required:
+      - invoices
+      - customer_choices
+      - item_choices
       properties:
         invoices:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/Invoice'
+            "$ref": "#/components/schemas/Invoice"
         customer_choices:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/CustomerChoice'
+            "$ref": "#/components/schemas/CustomerChoice"
         item_choices:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/SalesItemChoice'
+            "$ref": "#/components/schemas/SalesItemChoice"
     InvoiceResponse:
       type: object
       additionalProperties: false
-      required: [invoice, idempotency]
+      required:
+      - invoice
       properties:
         invoice:
-          $ref: '#/components/schemas/Invoice'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/Invoice"
     CreateInvoiceRequest:
       type: object
       additionalProperties: false
-      required: [invoice]
+      required:
+      - invoice
       properties:
         invoice:
           type: object
           additionalProperties: false
-          required: [customer_id, item_id, txn_date, due_date, amount, description]
+          required:
+          - customer_id
+          - item_id
+          - txn_date
+          - due_date
+          - amount
+          - description
           properties:
             customer_id:
               type: string
@@ -2026,7 +2010,7 @@ components:
               format: date
             amount:
               type: string
-              pattern: '^\d{1,11}(\.\d{1,2})?$'
+              pattern: "^\\d{1,11}(\\.\\d{1,2})?$"
             description:
               type: string
               minLength: 1
@@ -2034,14 +2018,18 @@ components:
     BillLine:
       type: object
       additionalProperties: false
-      required: [description, amount, account_id, account_name]
+      required:
+      - description
+      - amount
+      - account_id
+      - account_name
       properties:
         description:
           type: string
           nullable: true
         amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         account_id:
           type: string
         account_name:
@@ -2051,16 +2039,16 @@ components:
       type: object
       additionalProperties: false
       required:
-        - id
-        - doc_number
-        - txn_date
-        - due_date
-        - vendor_id
-        - vendor_name
-        - payable_account_id
-        - total_amount
-        - balance
-        - lines
+      - id
+      - doc_number
+      - txn_date
+      - due_date
+      - vendor_id
+      - vendor_name
+      - payable_account_id
+      - total_amount
+      - balance
+      - lines
       properties:
         id:
           type: string
@@ -2082,69 +2070,74 @@ components:
           type: string
         total_amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         balance:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         lines:
           type: array
           items:
-            $ref: '#/components/schemas/BillLine'
+            "$ref": "#/components/schemas/BillLine"
     BillAccountChoices:
       type: object
       additionalProperties: false
-      required: [expense, payable]
+      required:
+      - expense
+      - payable
       properties:
         expense:
           type: array
           items:
-            $ref: '#/components/schemas/AccountChoice'
+            "$ref": "#/components/schemas/AccountChoice"
         payable:
           type: array
           items:
-            $ref: '#/components/schemas/AccountChoice'
+            "$ref": "#/components/schemas/AccountChoice"
     BillCatalogResponse:
       type: object
       additionalProperties: false
-      required: [bills, vendor_choices, account_choices]
+      required:
+      - bills
+      - vendor_choices
+      - account_choices
       properties:
         bills:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/Bill'
+            "$ref": "#/components/schemas/Bill"
         vendor_choices:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/VendorChoice'
+            "$ref": "#/components/schemas/VendorChoice"
         account_choices:
-          $ref: '#/components/schemas/BillAccountChoices'
+          "$ref": "#/components/schemas/BillAccountChoices"
     BillResponse:
       type: object
       additionalProperties: false
-      required: [bill, idempotency]
+      required:
+      - bill
       properties:
         bill:
-          $ref: '#/components/schemas/Bill'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/Bill"
     CreateBillRequest:
       type: object
       additionalProperties: false
-      required: [bill]
+      required:
+      - bill
       properties:
         bill:
           type: object
           additionalProperties: false
           required:
-            - vendor_id
-            - expense_account_id
-            - payable_account_id
-            - txn_date
-            - due_date
-            - amount
-            - description
+          - vendor_id
+          - expense_account_id
+          - payable_account_id
+          - txn_date
+          - due_date
+          - amount
+          - description
           properties:
             vendor_id:
               type: string
@@ -2160,7 +2153,7 @@ components:
               format: date
             amount:
               type: string
-              pattern: '^\d{1,11}(\.\d{1,2})?$'
+              pattern: "^\\d{1,11}(\\.\\d{1,2})?$"
             description:
               type: string
               minLength: 1
@@ -2168,24 +2161,26 @@ components:
     AppliedInvoice:
       type: object
       additionalProperties: false
-      required: [invoice_id, amount]
+      required:
+      - invoice_id
+      - amount
       properties:
         invoice_id:
           type: string
         amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
     CustomerPayment:
       type: object
       additionalProperties: false
       required:
-        - id
-        - txn_date
-        - customer_id
-        - customer_name
-        - total_amount
-        - unapplied_amount
-        - applied_invoices
+      - id
+      - txn_date
+      - customer_id
+      - customer_name
+      - total_amount
+      - unapplied_amount
+      - applied_invoices
       properties:
         id:
           type: string
@@ -2199,18 +2194,24 @@ components:
           nullable: true
         total_amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         unapplied_amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         applied_invoices:
           type: array
           items:
-            $ref: '#/components/schemas/AppliedInvoice'
+            "$ref": "#/components/schemas/AppliedInvoice"
     OpenInvoiceChoice:
       type: object
       additionalProperties: false
-      required: [id, doc_number, customer_id, customer_name, txn_date, balance]
+      required:
+      - id
+      - doc_number
+      - customer_id
+      - customer_name
+      - txn_date
+      - balance
       properties:
         id:
           type: string
@@ -2227,40 +2228,45 @@ components:
           format: date
         balance:
           type: string
-          pattern: '^\d+(\.\d+)?$'
+          pattern: "^\\d+(\\.\\d+)?$"
     CustomerPaymentCatalogResponse:
       type: object
       additionalProperties: false
-      required: [customer_payments, open_invoice_choices]
+      required:
+      - customer_payments
+      - open_invoice_choices
       properties:
         customer_payments:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/CustomerPayment'
+            "$ref": "#/components/schemas/CustomerPayment"
         open_invoice_choices:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/OpenInvoiceChoice'
+            "$ref": "#/components/schemas/OpenInvoiceChoice"
     CustomerPaymentResponse:
       type: object
       additionalProperties: false
-      required: [customer_payment, idempotency]
+      required:
+      - customer_payment
       properties:
         customer_payment:
-          $ref: '#/components/schemas/CustomerPayment'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/CustomerPayment"
     CreateCustomerPaymentRequest:
       type: object
       additionalProperties: false
-      required: [customer_payment]
+      required:
+      - customer_payment
       properties:
         customer_payment:
           type: object
           additionalProperties: false
-          required: [invoice_id, txn_date, amount]
+          required:
+          - invoice_id
+          - txn_date
+          - amount
           properties:
             invoice_id:
               type: string
@@ -2269,30 +2275,32 @@ components:
               format: date
             amount:
               type: string
-              pattern: '^\d{1,11}(\.\d{1,2})?$'
+              pattern: "^\\d{1,11}(\\.\\d{1,2})?$"
     AppliedBill:
       type: object
       additionalProperties: false
-      required: [bill_id, amount]
+      required:
+      - bill_id
+      - amount
       properties:
         bill_id:
           type: string
         amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
     BillPayment:
       type: object
       additionalProperties: false
       required:
-        - id
-        - txn_date
-        - vendor_id
-        - vendor_name
-        - pay_type
-        - payment_account_id
-        - payment_account_name
-        - total_amount
-        - applied_bills
+      - id
+      - txn_date
+      - vendor_id
+      - vendor_name
+      - pay_type
+      - payment_account_id
+      - payment_account_name
+      - total_amount
+      - applied_bills
       properties:
         id:
           type: string
@@ -2306,7 +2314,9 @@ components:
           nullable: true
         pay_type:
           type: string
-          enum: [Check, CreditCard]
+          enum:
+          - Check
+          - CreditCard
         payment_account_id:
           type: string
         payment_account_name:
@@ -2314,15 +2324,21 @@ components:
           nullable: true
         total_amount:
           type: string
-          pattern: '^-?\d+(\.\d+)?$'
+          pattern: "^-?\\d+(\\.\\d+)?$"
         applied_bills:
           type: array
           items:
-            $ref: '#/components/schemas/AppliedBill'
+            "$ref": "#/components/schemas/AppliedBill"
     OpenBillChoice:
       type: object
       additionalProperties: false
-      required: [id, doc_number, vendor_id, vendor_name, txn_date, balance]
+      required:
+      - id
+      - doc_number
+      - vendor_id
+      - vendor_name
+      - txn_date
+      - balance
       properties:
         id:
           type: string
@@ -2339,44 +2355,51 @@ components:
           format: date
         balance:
           type: string
-          pattern: '^\d+(\.\d+)?$'
+          pattern: "^\\d+(\\.\\d+)?$"
     BillPaymentCatalogResponse:
       type: object
       additionalProperties: false
-      required: [bill_payments, open_bill_choices, bank_account_choices]
+      required:
+      - bill_payments
+      - open_bill_choices
+      - bank_account_choices
       properties:
         bill_payments:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/BillPayment'
+            "$ref": "#/components/schemas/BillPayment"
         open_bill_choices:
           type: array
           maxItems: 1000
           items:
-            $ref: '#/components/schemas/OpenBillChoice'
+            "$ref": "#/components/schemas/OpenBillChoice"
         bank_account_choices:
           type: array
           items:
-            $ref: '#/components/schemas/AccountChoice'
+            "$ref": "#/components/schemas/AccountChoice"
     BillPaymentResponse:
       type: object
       additionalProperties: false
-      required: [bill_payment, idempotency]
+      required:
+      - bill_payment
       properties:
         bill_payment:
-          $ref: '#/components/schemas/BillPayment'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
+          "$ref": "#/components/schemas/BillPayment"
     CreateBillPaymentRequest:
       type: object
       additionalProperties: false
-      required: [bill_payment]
+      required:
+      - bill_payment
       properties:
         bill_payment:
           type: object
           additionalProperties: false
-          required: [bill_id, bank_account_id, txn_date, amount]
+          required:
+          - bill_id
+          - bank_account_id
+          - txn_date
+          - amount
           properties:
             bill_id:
               type: string
@@ -2387,11 +2410,13 @@ components:
               format: date
             amount:
               type: string
-              pattern: '^\d{1,11}(\.\d{1,2})?$'
+              pattern: "^\\d{1,11}(\\.\\d{1,2})?$"
     FinancialReportColumn:
       type: object
       additionalProperties: false
-      required: [title, type]
+      required:
+      - title
+      - type
       properties:
         title:
           type: string
@@ -2402,7 +2427,9 @@ components:
     FinancialReportCell:
       type: object
       additionalProperties: false
-      required: [value, id]
+      required:
+      - value
+      - id
       properties:
         value:
           type: string
@@ -2417,11 +2444,18 @@ components:
     FinancialReportRow:
       type: object
       additionalProperties: false
-      required: [kind, group, depth, cells]
+      required:
+      - kind
+      - group
+      - depth
+      - cells
       properties:
         kind:
           type: string
-          enum: [section, data, summary]
+          enum:
+          - section
+          - data
+          - summary
         group:
           type: string
           nullable: true
@@ -2434,25 +2468,30 @@ components:
           type: array
           minItems: 1
           items:
-            $ref: '#/components/schemas/FinancialReportCell'
+            "$ref": "#/components/schemas/FinancialReportCell"
     FinancialReport:
       type: object
       additionalProperties: false
       required:
-        - type
-        - title
-        - basis
-        - currency
-        - generated_at
-        - start_date
-        - end_date
-        - no_data
-        - columns
-        - rows
+      - type
+      - title
+      - basis
+      - currency
+      - generated_at
+      - start_date
+      - end_date
+      - no_data
+      - columns
+      - rows
       properties:
         type:
           type: string
-          enum: [profit_and_loss, balance_sheet, cash_flow, general_ledger, trial_balance]
+          enum:
+          - profit_and_loss
+          - balance_sheet
+          - cash_flow
+          - general_ledger
+          - trial_balance
         title:
           type: string
         basis:
@@ -2461,7 +2500,7 @@ components:
           description: Cash or Accrual when supplied; null for Cash Flow because QuickBooks omits ReportBasis.
         currency:
           type: string
-          pattern: '^[A-Z]{3}$'
+          pattern: "^[A-Z]{3}$"
         generated_at:
           type: string
           format: date-time
@@ -2480,15 +2519,19 @@ components:
           type: array
           minItems: 1
           items:
-            $ref: '#/components/schemas/FinancialReportColumn'
+            "$ref": "#/components/schemas/FinancialReportColumn"
         rows:
           type: array
           items:
-            $ref: '#/components/schemas/FinancialReportRow'
+            "$ref": "#/components/schemas/FinancialReportRow"
     FinancialReportFilters:
       type: object
       additionalProperties: false
-      required: [start_date, end_date, as_of_date, accounting_method]
+      required:
+      - start_date
+      - end_date
+      - as_of_date
+      - accounting_method
       properties:
         start_date:
           type: string
@@ -2509,23 +2552,32 @@ components:
     FinancialReportResponse:
       type: object
       additionalProperties: false
-      required: [report, filters]
+      required:
+      - report
+      - filters
       properties:
         report:
-          $ref: '#/components/schemas/FinancialReport'
+          "$ref": "#/components/schemas/FinancialReport"
         filters:
-          $ref: '#/components/schemas/FinancialReportFilters'
+          "$ref": "#/components/schemas/FinancialReportFilters"
     JournalEntryLine:
       type: object
       additionalProperties: false
-      required: [posting_type, amount, account_id, account_name, description]
+      required:
+      - posting_type
+      - amount
+      - account_id
+      - account_name
+      - description
       properties:
         posting_type:
           type: string
-          enum: [Debit, Credit]
+          enum:
+          - Debit
+          - Credit
         amount:
           type: string
-          pattern: '^\d+(\.\d+)?$'
+          pattern: "^\\d+(\\.\\d+)?$"
           description: Decimal string; never a JSON floating-point number.
           example: '100.00'
         account_id:
@@ -2540,7 +2592,13 @@ components:
     JournalEntry:
       type: object
       additionalProperties: false
-      required: [id, txn_date, doc_number, memo, balanced, lines]
+      required:
+      - id
+      - txn_date
+      - doc_number
+      - memo
+      - balanced
+      - lines
       properties:
         id:
           type: string
@@ -2560,105 +2618,41 @@ components:
           type: array
           minItems: 2
           items:
-            $ref: '#/components/schemas/JournalEntryLine'
+            "$ref": "#/components/schemas/JournalEntryLine"
     JournalEntriesResponse:
       type: object
       additionalProperties: false
-      required: [journal_entries, pagination, filters]
+      required:
+      - journal_entries
+      - pagination
+      - filters
       properties:
         journal_entries:
           type: array
           maxItems: 50
           items:
-            $ref: '#/components/schemas/JournalEntry'
+            "$ref": "#/components/schemas/JournalEntry"
         pagination:
-          $ref: '#/components/schemas/ReadPagination'
+          "$ref": "#/components/schemas/ReadPagination"
         filters:
-          $ref: '#/components/schemas/TxnDateFilters'
+          "$ref": "#/components/schemas/TxnDateFilters"
     JournalEntryResponse:
       type: object
       additionalProperties: false
-      required: [journal_entry, idempotency]
+      required:
+      - journal_entry
       properties:
         journal_entry:
-          $ref: '#/components/schemas/JournalEntry'
-        idempotency:
-          $ref: '#/components/schemas/IdempotencyResult'
-    JournalEntryOperation:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - status
-        - txn_date
-        - memo
-        - amount
-        - debit_account_id
-        - credit_account_id
-        - quickbooks_journal_entry_id
-        - error_code
-        - created_at
-        - completed_at
-      properties:
-        id:
-          type: integer
-          format: int64
-          minimum: 1
-          description: Local audit operation ID.
-        status:
-          type: string
-          enum: [pending, succeeded, rejected, uncertain]
-        txn_date:
-          type: string
-          format: date
-        memo:
-          type: string
-          minLength: 1
-          maxLength: 500
-        amount:
-          type: string
-          pattern: '^\d{1,12}(\.\d{1,2})?$'
-          description: Original decimal string submitted to Rails.
-        debit_account_id:
-          type: string
-          pattern: '^\d{1,255}$'
-        credit_account_id:
-          type: string
-          pattern: '^\d{1,255}$'
-        quickbooks_journal_entry_id:
-          type: string
-          nullable: true
-          pattern: '^\d{1,255}$'
-          description: Connection-scoped QuickBooks JournalEntry ID when known.
-        error_code:
-          type: string
-          nullable: true
-          maxLength: 64
-        created_at:
-          type: string
-          format: date-time
-        completed_at:
-          type: string
-          nullable: true
-          format: date-time
-    JournalEntryOperationsResponse:
-      type: object
-      additionalProperties: false
-      required: [journal_entry_operations, pagination, filters]
-      properties:
-        journal_entry_operations:
-          type: array
-          maxItems: 50
-          items:
-            $ref: '#/components/schemas/JournalEntryOperation'
-        pagination:
-          $ref: '#/components/schemas/ReadPagination'
-        filters:
-          $ref: '#/components/schemas/TxnDateFilters'
+          "$ref": "#/components/schemas/JournalEntry"
     ReadPagination:
       type: object
       additionalProperties: false
-      required: [page, per_page, returned_count, has_more, next_page]
+      required:
+      - page
+      - per_page
+      - returned_count
+      - has_more
+      - next_page
       properties:
         page:
           type: integer
@@ -2682,7 +2676,9 @@ components:
     TxnDateFilters:
       type: object
       additionalProperties: false
-      required: [txn_date_from, txn_date_to]
+      required:
+      - txn_date_from
+      - txn_date_to
       properties:
         txn_date_from:
           type: string
@@ -2692,28 +2688,21 @@ components:
           type: string
           nullable: true
           format: date
-    IdempotencyResult:
-      type: object
-      additionalProperties: false
-      required: [replayed, operation_id]
-      properties:
-        replayed:
-          type: boolean
-          description: True when Rails returned the stored successful result without calling QuickBooks.
-        operation_id:
-          type: integer
-          format: int64
-          minimum: 1
-          description: Local connection-scoped audit operation identifier.
     CreateJournalEntryRequest:
       type: object
       additionalProperties: false
-      required: [journal_entry]
+      required:
+      - journal_entry
       properties:
         journal_entry:
           type: object
           additionalProperties: false
-          required: [txn_date, memo, amount, debit_account_id, credit_account_id]
+          required:
+          - txn_date
+          - memo
+          - amount
+          - debit_account_id
+          - credit_account_id
           properties:
             txn_date:
               type: string
@@ -2724,19 +2713,21 @@ components:
               maxLength: 500
             amount:
               type: string
-              pattern: '^\d{1,12}(\.\d{1,2})?$'
+              pattern: "^\\d{1,12}(\\.\\d{1,2})?$"
               description: Positive decimal string with at most two decimal places.
               example: '100.00'
             debit_account_id:
               type: string
-              pattern: '^\d{1,255}$'
+              pattern: "^\\d{1,255}$"
             credit_account_id:
               type: string
-              pattern: '^\d{1,255}$'
+              pattern: "^\\d{1,255}$"
     ErrorDetail:
       type: object
       additionalProperties: false
-      required: [code, message]
+      required:
+      - code
+      - message
       properties:
         code:
           type: string
@@ -2745,152 +2736,77 @@ components:
     ErrorResponse:
       type: object
       additionalProperties: false
-      required: [error]
+      required:
+      - error
       properties:
         error:
-          $ref: '#/components/schemas/ErrorDetail'
+          "$ref": "#/components/schemas/ErrorDetail"
   responses:
-    ReplayedEmployee:
-      description: A completed identical Employee request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/EmployeeResponse'
-    ReplayedTimeActivity:
-      description: A completed identical TimeActivity request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/TimeActivityResponse'
-    ReplayedTaxCode:
-      description: A completed identical TaxCode request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/TaxCodeResponse'
-    ReplayedInventoryItem:
-      description: A completed identical Inventory Item request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/InventoryItemResponse'
-    ReplayedCustomer:
-      description: A completed identical Customer request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/CustomerResponse'
-    ReplayedVendor:
-      description: A completed identical Vendor request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/VendorResponse'
-    ReplayedInvoice:
-      description: A completed identical Invoice request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/InvoiceResponse'
-    ReplayedBill:
-      description: A completed identical Bill request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/BillResponse'
-    ReplayedCustomerPayment:
-      description: A completed identical Customer Payment request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/CustomerPaymentResponse'
-    ReplayedBillPayment:
-      description: A completed identical Bill Payment request replayed locally; QuickBooks was not called.
-      headers:
-        Idempotency-Replayed:
-          $ref: '#/components/headers/IdempotencyReplayed'
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/BillPaymentResponse'
     Unauthorized:
-      description: The QuickBooks connection is inactive or authentication failed.
+      description: The current Rails session has no matching process-local QuickBooks connection. Reconnect QuickBooks and retry.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: quickbooks_reconnect_required
+              message: Reconnect QuickBooks before continuing.
     Forbidden:
       description: QuickBooks denied access.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     NotFound:
-      description: The local connection or QuickBooks resource was not found.
+      description: The requested QuickBooks resource was not found.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     UnprocessableEntity:
       description: Request parameters or create input were invalid, or QuickBooks rejected the request.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     Conflict:
-      description: The idempotency key was reused with different input, its earlier outcome cannot be safely replayed, or QuickBooks reported a conflict.
+      description: QuickBooks reported a resource conflict.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     RateLimited:
       description: QuickBooks rate limit was reached.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     BadGateway:
       description: QuickBooks returned malformed or unexpected data.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     Unavailable:
       description: QuickBooks or required local configuration is unavailable.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     Timeout:
       description: The QuickBooks API request timed out.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
+    BadRequest:
+      description: The JSON body is malformed or required request fields are missing.
+      content:
+        application/json:
+          schema:
+            "$ref": "#/components/schemas/ErrorResponse"
+          example:
+            error:
+              code: invalid_request
+              message: Required request fields are missing.

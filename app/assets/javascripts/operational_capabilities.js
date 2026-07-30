@@ -17,13 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const taxCodeForm = document.querySelector("[data-tax-code-create-form]")
   const inventoryItemForm = document.querySelector("[data-inventory-item-create-form]")
   const forms = [employeeForm, timeActivityForm, taxCodeForm, inventoryItemForm]
-  const keys = new WeakMap()
   const transientGetErrorCodes = new Set(["quickbooks_timeout", "quickbooks_unavailable"])
-  const renewableIdempotencyErrorCodes = new Set([
-    "idempotency_key_invalid",
-    "idempotency_key_reused",
-    "idempotency_request_rejected"
-  ])
   const state = {
     employees: [],
     timeActivities: [],
@@ -43,12 +37,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const csrfToken = () => document.querySelector("meta[name='csrf-token']")?.content
-  const nextIdempotencyKey = () => window.crypto.randomUUID()
-  const idempotencyKey = (form) => {
-    if (!keys.has(form)) keys.set(form, nextIdempotencyKey())
-    return keys.get(form)
-  }
-  const resetIdempotencyKey = (form) => keys.set(form, nextIdempotencyKey())
 
   const apiRequest = async (url, options = {}, retryCount = 0) => {
     const headers = { Accept: "application/json", ...options.headers }
@@ -286,7 +274,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return { [scope]: payload }
   }
 
-  const submitCreate = async ({form, scope, fields, confirmMessage, successLabel, refresh, localErrorCode}) => {
+  const submitCreate = async ({ form, scope, fields, confirmMessage, successLabel, refresh }) => {
     if (!window.confirm(confirmMessage)) return
 
     clearAlert()
@@ -297,16 +285,12 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       data = await apiRequest(form.action, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey(form) },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formPayload(form, scope, fields))
       })
-      resetIdempotencyKey(form)
       form.reset()
     } catch (error) {
       postError = error
-      if (error.apiCode === localErrorCode || renewableIdempotencyErrorCodes.has(error.apiCode)) {
-        resetIdempotencyKey(form)
-      }
     }
 
     const refreshResult = await Promise.allSettled([refresh()]).then(([result]) => result)
@@ -316,7 +300,12 @@ document.addEventListener("DOMContentLoaded", () => {
         `The related GET refresh also failed: ${refreshResult.reason.message}`
       showAlert(
         `${successLabel} POST failed`,
-        new ApiError(`${postError.message} ${refreshMessage}`, postError.apiCode, postError.statusCode)
+        new ApiError(
+          `${postError.message} ${refreshMessage} Check QuickBooks before repeating the POST because a repeated ` +
+            "execution may create another record.",
+          postError.apiCode,
+          postError.statusCode
+        )
       )
       setStatus(`${successLabel} was not confirmed; its related GET API was attempted.`)
     } else if (refreshResult.status === "rejected") {
@@ -327,8 +316,8 @@ document.addEventListener("DOMContentLoaded", () => {
       setStatus(`${successLabel} ${data[scope].id} is confirmed; its related GET refresh failed.`)
     } else {
       setStatus(
-        `${successLabel} ${data[scope].id} was created, read back, and recorded as local operation ` +
-          `${data.idempotency.operation_id}. Its related GET API was refreshed.`
+        `${successLabel} ${data[scope].id} was created and verified by QuickBooks readback. ` +
+          "Its related GET API was refreshed."
       )
     }
 
@@ -356,8 +345,7 @@ document.addEventListener("DOMContentLoaded", () => {
       fields: ["given_name", "family_name", "email", "phone"],
       confirmMessage: "POST one real Employee record to the QuickBooks sandbox?",
       successLabel: "Employee",
-      refresh: loadEmployees,
-      localErrorCode: "quickbooks_employee_input_invalid"
+      refresh: loadEmployees
     })
   })
 
@@ -369,8 +357,7 @@ document.addEventListener("DOMContentLoaded", () => {
       fields: ["employee_id", "txn_date", "hours", "minutes", "description"],
       confirmMessage: "POST one real employee TimeActivity to the QuickBooks sandbox?",
       successLabel: "TimeActivity",
-      refresh: loadTimeActivities,
-      localErrorCode: "quickbooks_time_activity_input_invalid"
+      refresh: loadTimeActivities
     })
   })
 
@@ -382,8 +369,7 @@ document.addEventListener("DOMContentLoaded", () => {
       fields: ["name", "tax_rate_id", "applicable_on"],
       confirmMessage: "POST one real TaxCode using the selected QuickBooks TaxRate?",
       successLabel: "TaxCode",
-      refresh: loadTaxCatalog,
-      localErrorCode: "quickbooks_tax_code_input_invalid"
+      refresh: loadTaxCatalog
     })
   })
 
@@ -407,8 +393,7 @@ document.addEventListener("DOMContentLoaded", () => {
       confirmMessage:
         "POST one real Inventory Item? Positive opening quantity and cost can change QuickBooks inventory value.",
       successLabel: "Inventory Item",
-      refresh: loadInventoryCatalog,
-      localErrorCode: "quickbooks_inventory_item_input_invalid"
+      refresh: loadInventoryCatalog
     })
   })
 

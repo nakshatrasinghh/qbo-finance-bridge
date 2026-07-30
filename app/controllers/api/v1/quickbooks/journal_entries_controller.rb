@@ -3,10 +3,9 @@ module Api
     module Quickbooks
       class JournalEntriesController < BaseController
         def index
-          connection = QuickbooksConnection.find(params[:connection_id])
           page =
             ::Quickbooks::JournalEntries::Query.new(
-              connection: connection,
+              connection: @connection,
               parameters: journal_entry_read_parameters
             ).call
 
@@ -21,23 +20,13 @@ module Api
         end
 
         def create
-          connection = QuickbooksConnection.find(params[:connection_id])
           result =
             ::Quickbooks::JournalEntries::Submit.new(
-              connection: connection,
-              idempotency_key: request.headers["Idempotency-Key"],
+              connection: @connection,
               attributes: journal_entry_params.to_h
             ).call
 
-          response.set_header("Idempotency-Replayed", result.replayed.to_s)
-          render json: {
-                   journal_entry: result.journal_entry,
-                   idempotency: {
-                     replayed: result.replayed,
-                     operation_id: result.operation.id
-                   }
-                 },
-                 status: result.replayed ? :ok : :created
+          render json: { journal_entry: result.journal_entry }, status: :created
         end
 
         private

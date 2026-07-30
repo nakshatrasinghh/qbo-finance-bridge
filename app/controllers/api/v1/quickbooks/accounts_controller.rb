@@ -3,10 +3,9 @@ module Api
     module Quickbooks
       class AccountsController < BaseController
         def index
-          connection = QuickbooksConnection.find(params[:connection_id])
           accounts =
             ::Quickbooks::Accounts::Query
-              .new(connection: connection)
+              .new(connection: @connection)
               .call
               .select { |account| ::Quickbooks::JournalEntries::Create.eligible_account?(account) }
 

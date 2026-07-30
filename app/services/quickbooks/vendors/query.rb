@@ -4,7 +4,7 @@ module Quickbooks
       MAX_RESULTS = 1_000
 
       def initialize(connection:, client: nil)
-        @client = client || Client.new(connection: connection)
+        @client = client || Client.new(connection:)
       end
 
       def call
@@ -28,8 +28,8 @@ module Quickbooks
 
             vendor = Details.from_payload(payload)
             valid =
-              vendor.id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT) &&
-                vendor.display_name.present? && vendor.balance && vendor.active == true
+              EntityId.valid?(vendor.id) && vendor.display_name.present? && vendor.balance &&
+                vendor.active == true
             raise_unexpected! unless valid
 
             vendor

@@ -25,14 +25,9 @@ module Api
         private
 
         def render_report(report_type)
-          connection = QuickbooksConnection.find(params[:connection_id])
           parameters =
-            ::Quickbooks::Reports::Parameters.build(
-              report_type: report_type,
-              attributes: report_parameters
-            )
-          report =
-            ::Quickbooks::Reports::Query.new(connection: connection, parameters: parameters).call
+            ::Quickbooks::Reports::Parameters.build(report_type:, attributes: report_parameters)
+          report = ::Quickbooks::Reports::Query.new(connection: @connection, parameters:).call
 
           render json: {
                    report: ::Quickbooks::Reports::Serializer.call(report),

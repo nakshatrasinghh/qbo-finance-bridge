@@ -1,28 +1,31 @@
 # QuickBooks capability matrix
 
-The current app exposes a controlled local QuickBooks Online sandbox surface.
+OpenAPI contract 2.0.0 exposes the current finance surface below. Every capability calls the QuickBooks Online
+sandbox through Rails; none call Intuit from the browser, persist a local finance record, or perform a
+create-time duplicate-name preflight.
 
-| Data | QuickBooks representation | GET | POST | Accounting impact | Status |
-|---|---|---|---|---|---|
-| Company connection | CompanyInfo/OAuth | Yes | OAuth only | None | Implemented |
-| Finance reports | ProfitAndLoss, BalanceSheet, CashFlow, GeneralLedger, TrialBalance | Five explicit Rails GETs | No report POST | None; QuickBooks calculates from transactions | Implemented |
-| Journal Entry account choices | Account | Eligible active Account query | No Account creation | None from reading | Implemented |
-| Financial records | JournalEntry | Date-filtered and paginated GET | Audited/idempotent balanced create + readback | Selected Accounts are debited/credited | Implemented |
-| Submission audit history | **Local-only** `quickbooks_sync_operations` | PostgreSQL GET | Rows produced by create APIs | None from reading | Implemented |
-| Employee directory | Employee | Active Employee query | Names plus optional email/phone; no payroll/PII fields | Non-posting master data | Implemented |
-| Employee time | TimeActivity | Recent employee time query | Active Employee, ISO date, whole hours/minutes, description | Records time; does not calculate payroll or invoice | Implemented |
-| Tax configuration | TaxCode, TaxRate, TaxAgency, TaxService | Codes, distinct rates, and agencies | New TaxCode from one existing active rate | Configuration only; no filing/payment/calculation | Implemented |
-| Inventory master data | Item plus supporting Accounts | Inventory Items and eligible account choices | New Inventory Item with decimal-safe quantity/cost/price and readback | Positive opening quantity/cost can affect inventory value | Implemented |
-| Customers | Customer | Active Customer query | Unique display name and optional company/contact data | Non-posting list record | Implemented |
-| Vendors | Vendor | Active Vendor query | Unique display name and optional company/contact data | Non-posting list record | Implemented |
-| Sales invoices | Invoice plus Customer and Item choices | Up to 1,000 Invoices and active references | One sale Item line, ISO dates, decimal amount, readback | Increases sales/receivable and may affect inventory | Implemented |
-| Vendor bills | Bill plus Vendor and Account choices | Up to 1,000 Bills and active references | One account-based expense line, ISO dates, decimal amount, readback | Increases expense/payable | Implemented |
-| Customer receipts | Payment plus open Invoice choices | Payments and open Invoices | One Payment linked to one open Invoice, capped at current balance | Reduces receivable; QuickBooks chooses its default deposit behavior | Implemented |
-| Vendor disbursements | BillPayment plus open Bill/bank choices | BillPayments, open Bills, active bank Accounts | One check-style BillPayment linked to one Bill, capped at current balance | Reduces cash and payable | Implemented |
-| Browser views/CSV | Rails HTML/JavaScript | API-backed tables and existing financial CSV projections | No extra API write | None from display/export | Implemented |
+| Capability | GET | POST | Rails behavior |
+| --- | ---: | ---: | --- |
+| Eligible Accounts | 1 | 0 | Active eligible accounts; excludes A/R and A/P for the simple Journal Entry flow |
+| Financial reports | 5 | 0 | Profit & Loss, Balance Sheet, Cash Flow, General Ledger, Trial Balance |
+| Journal Entries | 1 | 1 | Balanced two-line create, current account validation, readback |
+| Employees | 1 | 1 | Accounting API Employee; not full payroll |
+| Time Activities | 1 | 1 | Employee/vendor reference validation and readback |
+| Tax Codes | 1 | 1 | Controlled TaxCode create without local duplicate-name preflight |
+| Inventory Items | 1 | 1 | Decimal-safe quantity/cost and supporting-account validation |
+| Customers | 1 | 1 | Controlled Customer create without local duplicate-name preflight |
+| Vendors | 1 | 1 | Controlled Vendor create without local duplicate-name preflight |
+| Invoices | 1 | 1 | One-line Invoice create with current customer/item references |
+| Bills | 1 | 1 | One-line Bill create with current vendor/account references |
+| Customer Payments | 1 | 1 | Applies to a current open Invoice; validates open balance |
+| Bill Payments | 1 | 1 | Check-style payment of a current open Bill; validates open balance |
+| **Finance total** | **17** | **11** | **28 operations** |
 
-Not supported: payroll runs, compensation, paychecks, deductions, benefits, payroll calculations or filings;
-tax-rate/agency creation, tax calculation, returns, payments, or filings; inventory adjustments, purchase orders,
-sales receipts, categories, bundles, or Account auto-creation; invoice delivery, electronic payment processing,
-multi-line editing, refunds, credits, arbitrary JSON uploads, production QuickBooks, bulk synchronization, or
-reports beyond the five listed reports.
+`GET /health` and OAuth/dashboard routes are outside the finance count.
+
+Every POST receives a fresh internal QBO `requestid`, makes one outbound write attempt, reads the returned entity
+back, verifies it, and returns HTTP 201. There is no public idempotency key, replay response, local audit history,
+or automatic POST retry. Repeated POSTs may create duplicate sandbox records.
+
+The connection and tokens are process-local. The capability surface is sandbox-only, single-process, ephemeral,
+and unsuitable for production.

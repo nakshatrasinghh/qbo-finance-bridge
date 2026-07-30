@@ -5,7 +5,7 @@ module Quickbooks
       PAY_TYPES = %w[Check CreditCard].freeze
 
       def initialize(connection:, client: nil)
-        @client = client || Client.new(connection: connection)
+        @client = client || Client.new(connection:)
       end
 
       def call
@@ -29,10 +29,9 @@ module Quickbooks
 
             payment = Details.from_payload(payload)
             valid =
-              payment.id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT) &&
-                valid_date?(payment.txn_date) && payment.vendor_id.present? &&
-                PAY_TYPES.include?(payment.pay_type) && payment.payment_account_id.present? &&
-                payment.total_amount &&
+              EntityId.valid?(payment.id) && valid_date?(payment.txn_date) &&
+                payment.vendor_id.present? && PAY_TYPES.include?(payment.pay_type) &&
+                payment.payment_account_id.present? && payment.total_amount &&
                 payment.applied_bills.all? { |bill| valid_applied_bill?(bill) }
             raise_unexpected! unless valid
 
@@ -54,7 +53,7 @@ module Quickbooks
       end
 
       def valid_applied_bill?(bill)
-        bill.bill_id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT) && bill.amount
+        EntityId.valid?(bill.bill_id) && bill.amount
       end
 
       def raise_unexpected!

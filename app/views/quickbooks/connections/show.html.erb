@@ -13,59 +13,52 @@
     <dd><%= @connection.realm_id %></dd>
     <dt>Environment</dt>
     <dd><%= @connection.environment %></dd>
-    <dt>Connection status</dt>
-    <dd><%= @connection.status %></dd>
     <dt>Access token expires</dt>
     <dd><%= @connection.access_token_expires_at&.iso8601 || "—" %></dd>
     <dt>Refresh token expires</dt>
     <dd><%= @connection.refresh_token_expires_at&.iso8601 || "Not supplied by Intuit" %></dd>
   </dl>
 
-  <% if @company_info %>
-    <h2>CompanyInfo readback</h2>
-    <dl>
-      <dt>Company name</dt>
-      <dd><%= @company_info.company_name || "—" %></dd>
-      <dt>Legal name</dt>
-      <dd><%= @company_info.legal_name || "—" %></dd>
-      <dt>Country</dt>
-      <dd><%= @company_info.country || "—" %></dd>
-      <dt>Fiscal year starts</dt>
-      <dd><%= @company_info.fiscal_year_start_month || "—" %></dd>
-      <dt>Subscription status</dt>
-      <dd><%= @company_info.subscription_status || "—" %></dd>
-      <dt>Default time zone</dt>
-      <dd><%= @company_info.default_time_zone || "—" %></dd>
-    </dl>
-    <p>The CompanyInfo read succeeded through this connection's realm-scoped endpoint.</p>
-  <% elsif @quickbooks_error %>
+  <% if @quickbooks_error %>
     <p role="alert">
-      CompanyInfo could not be read: <%= @quickbooks_error.message %>
+      QuickBooks connection verification failed: <%= @quickbooks_error.message %>
       (code: <%= @quickbooks_error.code %>)
     </p>
-  <% elsif @connection.disconnected? %>
-    <p>This connection is disconnected; no API request was made.</p>
   <% end %>
 
-  <% if @connection.connected? %>
-    <p>
+  <h2>GET/POST dashboards</h2>
+  <ul>
+    <li>
       <%= link_to "Open financial records dashboard",
-                  quickbooks_connection_journal_entries_path(@connection) %>
-    </p>
-    <p>
+                  quickbooks_connection_journal_entries_path(@connection.id) %>
+    </li>
+    <li>
+      <%= link_to "Open sales and payables dashboard",
+                  quickbooks_connection_transactions_path(@connection.id) %>
+    </li>
+    <li>
       <%= link_to "Open workforce, tax, and inventory operations",
-                  quickbooks_connection_operations_path(@connection) %>
-    </p>
-    <p>
-      <%= link_to "Open sales and payables API dashboard",
-                  quickbooks_connection_transactions_path(@connection) %>
-    </p>
+                  quickbooks_connection_operations_path(@connection.id) %>
+    </li>
+    <li>
+      <%= link_to "Open Swagger GET/POST dashboard", api_docs_path %>.
+      Use connection handle <code><%= @connection.id %></code> in its connection-scoped routes.
+    </li>
+  </ul>
 
-    <%= button_to "Disconnect and revoke access",
-                  disconnect_quickbooks_connection_path(@connection),
-                  method: :delete,
-                  form: {
-                    onsubmit: "return window.confirm('Revoke this sandbox connection and clear its local tokens?')"
-                  } %>
-  <% end %>
+  <p>
+    Swagger calls Rails, and Rails calls QuickBooks sandbox. POST creates a real sandbox record; repeated POSTs
+    may create duplicates because this demo performs no local duplicate or replay check.
+  </p>
+  <p role="note">
+    This connection disappears after a Rails restart and may disappear after development reload. One Puma process
+    is supported. This design is not suitable for production.
+  </p>
+
+  <%= button_to "Disconnect and revoke access",
+                disconnect_quickbooks_connection_path(@connection.id),
+                method: :delete,
+                form: {
+                  onsubmit: "return window.confirm('Revoke this sandbox connection and clear its in-memory tokens?')"
+                } %>
 </main>

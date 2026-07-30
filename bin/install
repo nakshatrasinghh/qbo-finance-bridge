@@ -94,7 +94,7 @@ def ensure_bundle!
   run!(*bundle_command(version, "install"))
 end
 
-def load_encryption_support!
+def load_credentials_support!
   ENV["BUNDLE_GEMFILE"] = ROOT.join("Gemfile").to_s
   require "bundler/setup"
   require "active_support/encrypted_file"
@@ -122,9 +122,7 @@ end
 
 def required_credential_paths
   [
-    %w[active_record_encryption primary_key],
-    %w[active_record_encryption deterministic_key],
-    %w[active_record_encryption key_derivation_salt],
+    %w[secret_key_base],
     %w[quickbooks client_id],
     %w[quickbooks client_secret],
     %w[quickbooks redirect_uri]
@@ -179,11 +177,6 @@ def create_credentials!
   master_key = ActiveSupport::EncryptedFile.generate_key
   content = {
     "secret_key_base" => SecureRandom.hex(64),
-    "active_record_encryption" => {
-      "primary_key" => SecureRandom.alphanumeric(32),
-      "deterministic_key" => SecureRandom.alphanumeric(32),
-      "key_derivation_salt" => SecureRandom.alphanumeric(32)
-    },
     "quickbooks" => {
       "client_id" => client_id,
       "client_secret" => client_secret,
@@ -226,20 +219,19 @@ end
 def check_installation!
   version = locked_bundler_version
   run!(*bundle_command(version, "check"))
-  load_encryption_support!
+  load_credentials_support!
   check_credentials!
   run!(
     RbConfig.ruby,
     ROOT.join("bin/rails").to_s,
     "runner",
-    "Quickbooks::Configuration.new.validate!; ActiveRecord::Base.connection.execute('SELECT 1'); " \
-      "puts 'Rails, PostgreSQL, encryption, and QuickBooks configuration: ready'"
+    "Quickbooks::Configuration.new.validate!; puts 'Rails and QuickBooks sandbox configuration: ready'"
   )
 end
 
 def install!
   ensure_bundle!
-  load_encryption_support!
+  load_credentials_support!
   prepare_credentials!
   run! RbConfig.ruby, ROOT.join("bin/setup").to_s, "--skip-server"
   puts <<~MESSAGE
@@ -262,8 +254,8 @@ case ARGV
 when ["--help"], ["-h"]
   puts <<~HELP
     Usage:
-      bin/install          Install dependencies, create local credentials when needed, and prepare PostgreSQL.
-      bin/install --check  Verify dependencies, credentials, PostgreSQL, and application configuration.
+      bin/install          Install dependencies and create local credentials when needed.
+      bin/install --check  Verify dependencies, credentials, and sandbox application configuration.
 
     Detailed prerequisites and Intuit portal steps: #{GUIDE}
   HELP

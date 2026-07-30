@@ -12,7 +12,6 @@ module Quickbooks
         due_date: nil,
         amount: nil,
         description: nil,
-        request_id:,
         client: nil
       )
         @connection = connection
@@ -23,29 +22,20 @@ module Quickbooks
         @due_date_input = due_date.to_s
         @amount_input = amount.to_s.strip
         @description = description.to_s.strip
-        @request_id = request_id
-        @client = client || Client.new(connection: connection)
-        @post_attempted = false
+        @client = client || Client.new(connection:)
       end
 
       def call
         validate_input!
         validate_references!
 
-        @post_attempted = true
-        response = client.post("bill", json: payload, params: { requestid: request_id })
-        @quickbooks_entity_id = response.dig("Bill", "Id").to_s
+        response = client.post("bill", json: payload)
+        quickbooks_entity_id = response.dig("Bill", "Id").to_s
         if quickbooks_entity_id.blank?
           raise_unexpected!("QuickBooks did not return the created Bill ID.")
         end
 
         readback(quickbooks_entity_id)
-      end
-
-      attr_reader :quickbooks_entity_id
-
-      def post_attempted?
-        @post_attempted
       end
 
       private
@@ -57,15 +47,12 @@ module Quickbooks
                   :due_date,
                   :expense_account_id,
                   :payable_account_id,
-                  :request_id,
                   :txn_date,
                   :vendor_id
 
       def validate_input!
         [vendor_id, expense_account_id, payable_account_id].each do |id|
-          unless id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT)
-            raise_input!("Choose a valid QuickBooks Vendor and Accounts.")
-          end
+          raise_input!("Choose a valid QuickBooks Vendor and Accounts.") unless EntityId.valid?(id)
         end
         @txn_date = exact_date(@txn_date_input, "Bill date")
         @due_date = exact_date(@due_date_input, "Due date")
@@ -91,7 +78,7 @@ module Quickbooks
       end
 
       def validate_references!
-        catalog = Query.new(connection: connection, client: client).call
+        catalog = Query.new(connection:, client:).call
         valid =
           catalog.vendors.any? { |vendor| vendor.id == vendor_id } &&
             catalog.expense_accounts.any? { |account| account.id == expense_account_id } &&

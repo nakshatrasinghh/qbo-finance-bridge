@@ -5,11 +5,11 @@ module Quickbooks
 
       def initialize(connection:, client: nil)
         @connection = connection
-        @client = client || Client.new(connection: connection)
+        @client = client || Client.new(connection:)
       end
 
       def call
-        accounts = Accounts::Query.new(connection: connection, client: client).call
+        accounts = Accounts::Query.new(connection:, client:).call
 
         Details::Catalog.new(
           items: inventory_items,
@@ -52,8 +52,7 @@ module Quickbooks
 
             item = Details.from_payload(payload)
             valid =
-              item.id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT) && item.name.present? &&
-                item.quantity_on_hand &&
+              EntityId.valid?(item.id) && item.name.present? && item.quantity_on_hand &&
                 item.inventory_start_date.match?(/\A\d{4}-\d{2}-\d{2}\z/) &&
                 item.income_account_id.present? && item.expense_account_id.present? &&
                 item.asset_account_id.present?

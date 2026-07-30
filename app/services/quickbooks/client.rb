@@ -1,42 +1,52 @@
 module Quickbooks
   class Client
-    def initialize(connection:, configuration: Configuration.new, token_client: nil, http: nil)
+    def initialize(
+      connection:,
+      configuration: Configuration.new,
+      connection_store: SandboxConnectionStore.configured,
+      token_client: nil,
+      http: nil
+    )
       @connection = connection
       @configuration = configuration
-      @token_client = token_client || Oauth::TokenClient.new(configuration: configuration)
+      @connection_store = connection_store
+      @token_client = token_client || Oauth::TokenClient.new(configuration:)
       @http = http || build_http
     end
 
     def get(path, params: {})
+      reload_connection!
       validate_request!(path)
       refreshed = false
 
       if connection.access_token_expired?
-        refresh_access_token!
+        refresh_access_token!(force: false)
         refreshed = true
       end
 
       response = perform_get(path, params:, retried: false)
       if response.status == 401 && !refreshed
-        refresh_access_token!
+        refresh_access_token!(force: true)
         response = perform_get(path, params:, retried: true)
       end
 
       parse_response(response)
     end
 
-    def post(path, json:, params: {})
+    def post(path, json:)
+      reload_connection!
       validate_request!(path)
       body = serialize_json(json)
 
-      refresh_access_token! if connection.access_token_expired?
+      refresh_access_token!(force: false) if connection.access_token_expired?
+      request_id = SecureRandom.uuid
 
-      parse_response(perform_post(path, params:, body:))
+      parse_response(perform_post(path, body:, request_id:))
     end
 
     private
 
-    attr_reader :configuration, :connection, :http, :token_client
+    attr_reader :configuration, :connection, :connection_store, :http, :token_client
 
     def build_http
       Faraday.new(url: configuration.api_base_url) do |faraday|
@@ -48,7 +58,7 @@ module Quickbooks
 
     def validate_request!(path)
       configuration.validate!
-      ensure_connection_active!
+      ensure_connection_available!
 
       return if path.to_s.match?(%r{\A/?[a-z0-9_-]+(?:/[a-z0-9_-]+)*\z}i)
 
@@ -68,9 +78,17 @@ module Quickbooks
       end
     end
 
-    def perform_post(path, params:, body:)
-      perform_request(path:, params:, method: "POST", retried: false) do |endpoint, request_params|
-        http.post(endpoint, request_params) do |request|
+    def perform_post(path, body:, request_id:)
+      params = { requestid: request_id }
+      perform_request(
+        path:,
+        params:,
+        method: "POST",
+        request_id:,
+        retried: false
+      ) do |endpoint, request_params|
+        http.post(endpoint) do |request|
+          request.params.update(request_params)
           request.headers["Accept"] = "application/json"
           request.headers["Authorization"] = "Bearer #{connection.access_token}"
           request.headers["Content-Type"] = "application/json"
@@ -79,16 +97,16 @@ module Quickbooks
       end
     end
 
-    def perform_request(path:, params:, method:, retried:)
+    def perform_request(path:, params:, method:, retried:, request_id: SecureRandom.uuid)
       endpoint = "/v3/company/#{connection.realm_id}/#{path.to_s.delete_prefix("/")}"
       request_params = params.merge(minorversion: configuration.minor_version)
       payload = {
         connection_id: connection.id,
         realm_id: connection.realm_id,
-        method: method,
+        method:,
         path: endpoint,
-        request_id: SecureRandom.uuid,
-        retried: retried
+        request_id:,
+        retried:
       }
 
       ActiveSupport::Notifications.instrument("request.quickbooks", payload) do
@@ -129,37 +147,24 @@ module Quickbooks
             )
     end
 
-    def refresh_access_token!
-      expected_access_token = connection.access_token
-      expected_refresh_token = connection.refresh_token
-      begin
-        token_set = token_client.refresh(refresh_token: expected_refresh_token)
-      rescue Error::Authentication
-        connection.reload
-        credentials_changed =
-          connection.access_token != expected_access_token ||
-            connection.refresh_token != expected_refresh_token
-        raise unless credentials_changed && !connection.access_token_expired?
-      else
-        connection.with_lock do
-          connection.reload
-          credentials_unchanged =
-            connection.access_token == expected_access_token &&
-              connection.refresh_token == expected_refresh_token
-          connection.store_refreshed_tokens!(token_set: token_set) if credentials_unchanged
+    def refresh_access_token!(force:)
+      @connection =
+        connection_store.refresh(connection:, force:) do |current|
+          token_client.refresh(refresh_token: current.refresh_token)
         end
-        connection.reload
-      end
-
-      ensure_connection_active!
+      ensure_connection_available!
     end
 
-    def ensure_connection_active!
-      return if connection.connected? && connection.environment == configuration.environment
+    def reload_connection!
+      @connection = connection_store.fetch!(connection.id)
+    end
 
-      raise Error::Authentication.new(
-              "QuickBooks connection is not active.",
-              code: "quickbooks_connection_inactive",
+    def ensure_connection_available!
+      return if connection.environment == configuration.environment
+
+      raise Error::ReconnectRequired.new(
+              "The QuickBooks sandbox connection is missing or expired. Reconnect QuickBooks.",
+              code: "quickbooks_reconnect_required",
               http_status: :unauthorized
             )
     end
@@ -191,12 +196,12 @@ module Quickbooks
       details = fault_details(payload)
       attributes = {
         code: details[:quickbooks_code] || "quickbooks_upstream_error",
-        details: details,
+        details:,
         upstream_status: response.status
       }
 
       error_class, message, http_status = error_mapping(response.status)
-      raise error_class.new(message, http_status: http_status, **attributes)
+      raise error_class.new(message, http_status:, **attributes)
     end
 
     def error_mapping(status)
@@ -225,7 +230,7 @@ module Quickbooks
       error = fault.is_a?(Hash) && Array(fault["Error"]).first
       quickbooks_code = error.is_a?(Hash) ? safe_code(error["code"]) : nil
       fault_type = fault.is_a?(Hash) ? safe_code(fault["type"]) : nil
-      { quickbooks_code: quickbooks_code, fault_type: fault_type }.compact
+      { quickbooks_code:, fault_type: }.compact
     end
 
     def safe_code(value)

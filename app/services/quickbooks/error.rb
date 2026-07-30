@@ -12,7 +12,11 @@ module Quickbooks
 
     class Configuration < Error
     end
+    class InvalidSandboxConfiguration < Configuration
+    end
     class Authentication < Error
+    end
+    class ReconnectRequired < Authentication
     end
     class Authorization < Error
     end

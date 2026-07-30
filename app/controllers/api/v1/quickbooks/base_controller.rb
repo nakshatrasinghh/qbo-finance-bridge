@@ -3,10 +3,12 @@ module Api
     module Quickbooks
       class BaseController < ::Quickbooks::BaseController
         rescue_from ::Quickbooks::Error, with: :render_quickbooks_error
-        rescue_from ActiveRecord::RecordNotFound, with: :render_not_found
+        rescue_from ::Quickbooks::Error::ReconnectRequired, with: :render_quickbooks_error
         rescue_from ActionController::ParameterMissing, with: :render_missing_parameters
 
         before_action :disable_api_caching
+
+        include ::Quickbooks::ConnectionScoped
 
         private
 
@@ -23,16 +25,6 @@ module Api
                  status: error.http_status
         end
 
-        def render_not_found(_error)
-          render json: {
-                   error: {
-                     code: "not_found",
-                     message: "QuickBooks connection was not found."
-                   }
-                 },
-                 status: :not_found
-        end
-
         def render_missing_parameters(_error)
           render json: {
                    error: {
@@ -40,7 +32,7 @@ module Api
                      message: "Required request fields are missing."
                    }
                  },
-                 status: :unprocessable_entity
+                 status: :bad_request
         end
 
         def disable_api_caching

@@ -3,7 +3,9 @@
 CI.run do
   step "Setup", "bin/setup --skip-server"
 
-  step "Tests", "bin/rails test"
+  step "Boot: Rails", 'bin/rails runner "puts \"Rails boot: ready\""'
+  step "Boot: Zeitwerk", "bin/rails zeitwerk:check"
+  step "Test: Rails", "bin/rails test"
 
   step "Style: Ruby formatting", "bin/format check"
   step "Style: Ruby", "bin/rubocop"

@@ -3,8 +3,7 @@ module Api
     module Quickbooks
       class EmployeesController < BaseController
         def index
-          connection = QuickbooksConnection.find(params[:connection_id])
-          employees = ::Quickbooks::Employees::Query.new(connection: connection).call
+          employees = ::Quickbooks::Employees::Query.new(connection: @connection).call
 
           render json: {
                    employees:
@@ -19,33 +18,19 @@ module Api
         end
 
         def create
-          connection = QuickbooksConnection.find(params[:connection_id])
           result =
             ::Quickbooks::Employees::Submit.new(
-              connection: connection,
-              idempotency_key: request.headers["Idempotency-Key"],
+              connection: @connection,
               attributes: employee_params.to_h
             ).call
 
-          render_create(result)
+          render json: { employee: result.employee }, status: :created
         end
 
         private
 
         def employee_params
           params.require(:employee).permit(:given_name, :family_name, :email, :phone)
-        end
-
-        def render_create(result)
-          response.set_header("Idempotency-Replayed", result.replayed.to_s)
-          render json: {
-                   employee: result.employee,
-                   idempotency: {
-                     replayed: result.replayed,
-                     operation_id: result.operation.id
-                   }
-                 },
-                 status: result.replayed ? :ok : :created
         end
       end
     end

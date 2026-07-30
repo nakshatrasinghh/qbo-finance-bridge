@@ -6,7 +6,7 @@ module Quickbooks
       MAX_RESULTS = 1_000
 
       def initialize(connection:, client: nil)
-        @client = client || Client.new(connection: connection)
+        @client = client || Client.new(connection:)
       end
 
       def call
@@ -35,8 +35,7 @@ module Quickbooks
                 name: payload["Name"].to_s,
                 item_type: payload["Type"]
               )
-            valid =
-              choice.id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT) && choice.name.present?
+            valid = EntityId.valid?(choice.id) && choice.name.present?
             raise_unexpected! unless valid
 
             choice

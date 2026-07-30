@@ -4,7 +4,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const accountsUrl = dashboard.dataset.accountsUrl
   const journalEntriesUrl = dashboard.dataset.journalEntriesUrl
-  const auditHistoryUrl = dashboard.dataset.auditHistoryUrl
   const financialReportUrls = {
     profit_and_loss: dashboard.dataset.profitAndLossUrl,
     balance_sheet: dashboard.dataset.balanceSheetUrl,
@@ -23,18 +22,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const status = document.querySelector("#api-status")
   const recordsSummary = document.querySelector("#records-summary")
   const recordRows = document.querySelector("#journal-entry-rows")
-  const auditSummary = document.querySelector("#audit-summary")
-  const auditRows = document.querySelector("#audit-operation-rows")
   const filterForm = dashboard.querySelector("[data-finance-filter-form]")
   const dateFromFilter = dashboard.querySelector("[data-filter-date-from]")
   const dateToFilter = dashboard.querySelector("[data-filter-date-to]")
   const memoFilter = dashboard.querySelector("[data-filter-memo]")
-  const auditStatusFilter = dashboard.querySelector("[data-filter-audit-status]")
   const clearFiltersButton = dashboard.querySelector("[data-clear-filters]")
   const exportJournalEntriesButton = dashboard.querySelector("[data-export-journal-entries]")
-  const exportAuditHistoryButton = dashboard.querySelector("[data-export-audit-history]")
   const loadMoreJournalEntriesButton = dashboard.querySelector("[data-load-more-journal-entries]")
-  const loadMoreAuditButton = dashboard.querySelector("[data-load-more-audit]")
   const financialReportForm = dashboard.querySelector("[data-financial-report-form]")
   const financialReportType = dashboard.querySelector("[data-financial-report-type]")
   const financialReportStartDate = dashboard.querySelector("[data-financial-report-start-date]")
@@ -57,25 +51,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const financialReportCurrency = dashboard.querySelector("[data-report-currency]")
   const csrfToken = document.querySelector("meta[name='csrf-token']")?.content
   const currency = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" })
-  const nextIdempotencyKey = () => window.crypto.randomUUID()
   const readPageSize = 25
   const transientGetErrorCodes = new Set(["quickbooks_timeout", "quickbooks_unavailable"])
-  const renewableIdempotencyErrorCodes = new Set([
-    "idempotency_key_invalid",
-    "idempotency_key_reused",
-    "idempotency_request_rejected"
-  ])
 
-  let idempotencyKey = nextIdempotencyKey()
   let journalEntries = []
-  let auditOperations = []
   let visibleJournalEntries = []
-  let visibleAuditOperations = []
   let journalEntriesLoaded = false
-  let auditHistoryLoaded = false
   let journalPagination = null
-  let auditPagination = null
-  let appliedFilters = { dateFrom: "", dateTo: "", memo: "", auditStatus: "" }
+  let appliedFilters = { dateFrom: "", dateTo: "", memo: "" }
   let currentFinancialReport = null
 
   const setStatus = (message, isError = false) => {
@@ -163,22 +146,6 @@ document.addEventListener("DOMContentLoaded", () => {
     row.appendChild(cell)
     recordRows.replaceChildren(row)
     recordsSummary.textContent = "Journal Entries could not be loaded."
-  }
-
-  const markAuditHistoryUnavailable = () => {
-    auditHistoryLoaded = false
-    auditOperations = []
-    visibleAuditOperations = []
-    auditPagination = null
-    exportAuditHistoryButton.disabled = true
-    loadMoreAuditButton.hidden = true
-    const row = document.createElement("tr")
-    const cell = document.createElement("td")
-    cell.colSpan = 7
-    cell.textContent = "Audit history API unavailable."
-    row.appendChild(cell)
-    auditRows.replaceChildren(row)
-    auditSummary.textContent = "Submission audit history could not be loaded."
   }
 
   const markFinancialReportUnavailable = () => {
@@ -318,8 +285,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const filterValuesFromControls = () => ({
     dateFrom: dateFromFilter.value,
     dateTo: dateToFilter.value,
-    memo: memoFilter.value.trim().toLocaleLowerCase(),
-    auditStatus: auditStatusFilter.value
+    memo: memoFilter.value.trim().toLocaleLowerCase()
   })
 
   const currentFilters = () => appliedFilters
@@ -418,112 +384,25 @@ document.addEventListener("DOMContentLoaded", () => {
     return journalEntries.length
   }
 
-  const renderAuditOperations = (operations, total) => {
-    auditRows.replaceChildren()
-    const operationLabel = total === 1 ? "operation" : "operations"
-    const page = auditPagination?.page || 1
-    const availability = auditPagination?.has_more ?
-      "More matching operations are available." :
-      "All matching operations are loaded."
-    auditSummary.textContent = `Showing ${operations.length} of ${total} loaded local submission ` +
-      `${operationLabel} through API page ${page}. ${availability}`
-
-    if (operations.length === 0) {
-      const row = document.createElement("tr")
-      const cell = document.createElement("td")
-      cell.colSpan = 7
-      cell.textContent = total === 0 ?
-        "No Journal Entry submissions have been recorded locally." :
-        "No local submission operations match the current filters."
-      row.appendChild(cell)
-      auditRows.appendChild(row)
-      return
-    }
-
-    operations.forEach((operation) => {
-      const row = document.createElement("tr")
-      const submitted = document.createElement("td")
-      const state = document.createElement("td")
-      const date = document.createElement("td")
-      const memo = document.createElement("td")
-      const amount = document.createElement("td")
-      const accounts = document.createElement("td")
-      const quickbooksId = document.createElement("td")
-
-      submitted.textContent = new Date(operation.created_at).toLocaleString()
-      state.textContent = `${operation.status} · operation ${operation.id}`
-      state.className = `audit-status audit-status-${operation.status}`
-      if (operation.error_code) state.textContent += ` · ${operation.error_code}`
-      date.textContent = operation.txn_date
-      memo.textContent = operation.memo
-      amount.textContent = currency.format(Number(operation.amount))
-      accounts.textContent = `Debit ${operation.debit_account_id} → Credit ${operation.credit_account_id}`
-      quickbooksId.textContent = operation.quickbooks_journal_entry_id || "—"
-      row.append(submitted, state, date, memo, amount, accounts, quickbooksId)
-      auditRows.appendChild(row)
-    })
-  }
-
-  const renderFilteredAuditOperations = () => {
-    const filters = currentFilters()
-    visibleAuditOperations = auditOperations.filter((operation) => {
-      return matchesEntryFilters(operation, filters) &&
-        (!filters.auditStatus || operation.status === filters.auditStatus)
-    })
-    exportAuditHistoryButton.disabled = visibleAuditOperations.length === 0
-    renderAuditOperations(visibleAuditOperations, auditOperations.length)
-  }
-
-  const loadAuditHistory = async ({ page = 1, append = false } = {}) => {
-    const data = await apiRequest(paginatedReadUrl(auditHistoryUrl, page))
-    auditOperations = append ?
-      appendUniqueById(auditOperations, data.journal_entry_operations) :
-      data.journal_entry_operations
-    auditPagination = data.pagination
-    auditHistoryLoaded = true
-    loadMoreAuditButton.hidden = !auditPagination.has_more
-    loadMoreAuditButton.disabled = false
-    renderFilteredAuditOperations()
-    return auditOperations.length
-  }
-
   const renderAppliedClientFilters = () => {
     if (journalEntriesLoaded) renderFilteredJournalEntries()
-    if (auditHistoryLoaded) renderFilteredAuditOperations()
   }
 
   const reloadReadData = async () => {
     clearApiAlert()
     loadMoreJournalEntriesButton.disabled = true
-    loadMoreAuditButton.disabled = true
     setStatus("GETting page 1 with the selected server-side entry dates…")
 
-    const [entriesResult, auditResult] = await Promise.allSettled([
-      loadJournalEntries(),
-      loadAuditHistory()
-    ])
-    const failures = []
-
-    if (entriesResult.status === "rejected") {
-      failures.push(`Journal Entries: ${entriesResult.reason.message}`)
+    try {
+      const count = await loadJournalEntries()
+      setStatus(
+        `Server date filters loaded ${count} Journal Entries. Memo filtering applies to the loaded page.`
+      )
+    } catch (error) {
       markJournalEntriesUnavailable()
+      showApiAlert("Read-only filters could not be applied", error.message)
+      setStatus("The filtered Journal Entries GET request failed.", true)
     }
-
-    if (auditResult.status === "rejected") {
-      failures.push(`Audit history: ${auditResult.reason.message}`)
-      markAuditHistoryUnavailable()
-    }
-
-    if (failures.length > 0) {
-      showApiAlert("Read-only filters could not be applied", failures.join(" "))
-      setStatus("One or more filtered GET requests failed.", true)
-      return
-    }
-
-    setStatus(
-      `Server date filters loaded ${entriesResult.value} Journal Entries and ${auditResult.value} audit ` +
-      `${auditResult.value === 1 ? "operation" : "operations"}. Memo and status filters apply to loaded pages.`
-    )
   }
 
   const applyFilters = async () => {
@@ -532,7 +411,7 @@ document.addEventListener("DOMContentLoaded", () => {
       nextFilters.dateTo !== appliedFilters.dateTo
     appliedFilters = nextFilters
 
-    if (serverDatesChanged || !journalEntriesLoaded || !auditHistoryLoaded) {
+    if (serverDatesChanged || !journalEntriesLoaded) {
       await reloadReadData()
       return
     }
@@ -540,8 +419,7 @@ document.addEventListener("DOMContentLoaded", () => {
     renderAppliedClientFilters()
     setStatus(
       `Browser filters applied: ${visibleJournalEntries.length} of ${journalEntries.length} loaded Journal ` +
-      `Entries and ${visibleAuditOperations.length} of ${auditOperations.length} loaded audit operations visible. ` +
-      "No API request was made."
+      "Entries visible. No API request was made."
     )
   }
 
@@ -564,28 +442,6 @@ document.addEventListener("DOMContentLoaded", () => {
       showApiAlert("More Journal Entries could not be loaded", error.message)
       setStatus(`Journal Entries API page ${nextPage} failed.`, true)
       loadMoreJournalEntriesButton.disabled = false
-    }
-  }
-
-  const loadMoreAuditHistory = async () => {
-    const nextPage = auditPagination?.next_page
-    if (!nextPage) return
-
-    const previousCount = auditOperations.length
-    loadMoreAuditButton.disabled = true
-    clearApiAlert()
-    setStatus(`GETting audit history API page ${nextPage}…`)
-
-    try {
-      await loadAuditHistory({ page: nextPage, append: true })
-      const added = auditOperations.length - previousCount
-      setStatus(
-        `Loaded ${added} more audit ${added === 1 ? "operation" : "operations"} through API page ${nextPage}.`
-      )
-    } catch (error) {
-      showApiAlert("More audit operations could not be loaded", error.message)
-      setStatus(`Audit history API page ${nextPage} failed.`, true)
-      loadMoreAuditButton.disabled = false
     }
   }
 
@@ -647,7 +503,6 @@ document.addEventListener("DOMContentLoaded", () => {
   })
 
   loadMoreJournalEntriesButton.addEventListener("click", loadMoreJournalEntries)
-  loadMoreAuditButton.addEventListener("click", loadMoreAuditHistory)
 
   const csvCell = (value) => {
     const text = value == null ? "" : String(value)
@@ -747,41 +602,6 @@ document.addEventListener("DOMContentLoaded", () => {
     )
   })
 
-  exportAuditHistoryButton.addEventListener("click", () => {
-    const headers = [
-      "operation_id",
-      "status",
-      "submitted_at",
-      "completed_at",
-      "txn_date",
-      "memo",
-      "amount",
-      "debit_account_id",
-      "credit_account_id",
-      "quickbooks_journal_entry_id",
-      "error_code"
-    ]
-    const rows = visibleAuditOperations.map((operation) => [
-      operation.id,
-      operation.status,
-      operation.created_at,
-      operation.completed_at,
-      operation.txn_date,
-      operation.memo,
-      operation.amount,
-      operation.debit_account_id,
-      operation.credit_account_id,
-      operation.quickbooks_journal_entry_id,
-      operation.error_code
-    ])
-
-    downloadCsv(`journal-entry-audit-${filenameDate()}.csv`, headers, rows)
-    setStatus(
-      `Downloaded ${rows.length} visible audit ${rows.length === 1 ? "operation" : "operations"}. ` +
-      "No API request was made."
-    )
-  })
-
   form.addEventListener("submit", async (event) => {
     event.preventDefault()
     if (!window.confirm("POST one real balanced Journal Entry to the QuickBooks sandbox?")) return
@@ -804,54 +624,37 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       data = await apiRequest(journalEntriesUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ journal_entry: journalEntry })
       })
-      idempotencyKey = nextIdempotencyKey()
       form.querySelector("[name='journal_entry[memo]']").value = ""
       form.querySelector("[name='journal_entry[amount]']").value = ""
     } catch (error) {
       postError = error
-      if (error.apiCode === "quickbooks_journal_entry_input_invalid" ||
-        renewableIdempotencyErrorCodes.has(error.apiCode)) {
-        idempotencyKey = nextIdempotencyKey()
-      }
     }
 
-    const [entriesRefresh, auditRefresh] = await Promise.allSettled([
-      loadJournalEntries(),
-      loadAuditHistory()
-    ])
-    const refreshFailures = [entriesRefresh, auditRefresh]
-      .filter((result) => result.status === "rejected")
-      .map((result) => result.reason.message)
+    const entriesRefresh = await Promise.allSettled([loadJournalEntries()]).then(([result]) => result)
 
     if (postError) {
-      const outcomeGuidance = postError.apiCode?.startsWith("idempotency_") ||
-        postError.apiCode === "quickbooks_journal_entry_input_invalid" ?
-        "" :
-        " Check QuickBooks before retrying because the transaction status may be uncertain."
-      const refreshGuidance = refreshFailures.length === 0 ?
-        " Journal Entries and audit history were refreshed." :
-        ` Related GET refresh failed: ${refreshFailures.join(" ")}`
+      const refreshGuidance = entriesRefresh.status === "fulfilled" ?
+        " Journal Entries were refreshed." :
+        ` The related GET refresh also failed: ${entriesRefresh.reason.message}`
       showApiAlert(
         "Journal Entry request failed",
-        `${postError.message}${outcomeGuidance}${refreshGuidance}`
+        `${postError.message}${refreshGuidance} Check QuickBooks before repeating the POST because a repeated ` +
+          "execution may create another record."
       )
-      setStatus("The Journal Entry POST failed; its related GET APIs were attempted.", true)
-    } else if (refreshFailures.length > 0) {
-      const action = data.idempotency.replayed ? "Reused" : "Created"
+      setStatus("The Journal Entry was not confirmed; its related GET API was attempted.", true)
+    } else if (entriesRefresh.status === "rejected") {
       showApiAlert(
-        `${action} Journal Entry, but refresh failed`,
-        `QuickBooks Journal Entry ${data.journal_entry.id} is confirmed. ${refreshFailures.join(" ")}`
+        "Journal Entry was created, but refresh failed",
+        `QuickBooks Journal Entry ${data.journal_entry.id} is confirmed. ${entriesRefresh.reason.message}`
       )
-      setStatus(`${action} QuickBooks Journal Entry ${data.journal_entry.id}; dashboard refresh failed.`, true)
+      setStatus(`Created QuickBooks Journal Entry ${data.journal_entry.id}; dashboard refresh failed.`, true)
     } else {
-      const action = data.idempotency.replayed ? "Reused" : "Created"
-      const replayMessage = data.idempotency.replayed ? " No duplicate transaction was created." : ""
       setStatus(
-        `${action} QuickBooks Journal Entry ${data.journal_entry.id} through the API and read it back. ` +
-        `Journal Entries and audit history were refreshed.${replayMessage}`
+        `Created QuickBooks Journal Entry ${data.journal_entry.id} and verified it by QuickBooks readback. ` +
+        "Journal Entries were refreshed."
       )
     }
 
@@ -860,10 +663,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   syncFinancialReportDateFields()
 
-  Promise.allSettled([loadAccounts(), loadJournalEntries(), loadAuditHistory(), loadFinancialReport()]).then(([
+  Promise.allSettled([loadAccounts(), loadJournalEntries(), loadFinancialReport()]).then(([
     accountsResult,
     entriesResult,
-    auditResult,
     reportResult
   ]) => {
     const failures = []
@@ -876,11 +678,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (entriesResult.status === "rejected") {
       failures.push(`Journal Entries: ${entriesResult.reason.message}`)
       markJournalEntriesUnavailable()
-    }
-
-    if (auditResult.status === "rejected") {
-      failures.push(`Audit history: ${auditResult.reason.message}`)
-      markAuditHistoryUnavailable()
     }
 
     if (reportResult.status === "rejected") {
@@ -896,7 +693,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setStatus(
       `API ready: ${accountsResult.value} Accounts, ${entriesResult.value} Journal Entries, and ` +
-      `${auditResult.value} local audit ${auditResult.value === 1 ? "operation" : "operations"}, plus ` +
       `${reportResult.value.title}, loaded as JSON.`
     )
   })

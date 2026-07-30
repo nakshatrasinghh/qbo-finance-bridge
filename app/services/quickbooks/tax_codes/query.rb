@@ -4,7 +4,7 @@ module Quickbooks
       MAX_RESULTS = 1_000
 
       def initialize(connection:, client: nil)
-        @client = client || Client.new(connection: connection)
+        @client = client || Client.new(connection:)
       end
 
       def call
@@ -71,7 +71,7 @@ module Quickbooks
       end
 
       def valid_id?(value)
-        value.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT)
+        EntityId.valid?(value)
       end
 
       def unique_records(records)

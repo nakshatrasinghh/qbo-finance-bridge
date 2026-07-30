@@ -1,184 +1,124 @@
 # Architecture
 
-For the accounting entities behind these components, see
-[`quickbooks_data_model.md`](quickbooks_data_model.md). The upstream-to-application data contract is documented
-in [`quickbooks_data_normalization.md`](quickbooks_data_normalization.md), and runtime request sequences are
-documented in [`data_flow.md`](data_flow.md).
+## Current boundary
 
-This is a small Rails monolith. Rails serves three HTML/vanilla-JavaScript dashboards, exposes twenty-nine finance JSON
-operations, stores the encrypted QuickBooks connection and audited create operations, and calls the QuickBooks
-Online sandbox REST API. There is no separate frontend project/process or generic integration framework.
+The application is a database-free, single-process QuickBooks Online sandbox bridge.
 
 ```mermaid
-flowchart TB
-  Browser["Finance browser"] --> FinancialPage["Financial records HTML page"]
-  Browser --> OperationsPage["Workforce, tax, and inventory HTML page"]
-  Browser --> TransactionsPage["Sales and payables HTML page"]
-  Browser --> Swagger["Swagger UI"]
-
-  FinancialPage --> FinancialJS["financial_records.js"]
-  OperationsPage --> OperationsJS["operational_capabilities.js"]
-  TransactionsPage --> TransactionsJS["accounting_transactions.js"]
-  Swagger --> Contract["docs/openapi.yaml"]
-
-  FinancialJS --> Controllers["Rails JSON controllers"]
-  OperationsJS --> Controllers
-  TransactionsJS --> Controllers
-  FinancialJS --> BrowserViews["In-memory filters and temporary CSV"]
-
-  Controllers --> ReadServices["Entity queries and report parsers"]
-  Controllers --> Submitters["Entity-specific submitters"]
-  Controllers --> AuditRead["Journal Entry audit-history reader"]
-
-  Submitters --> Coordinator["CreateSubmission idempotency coordinator"]
-  Coordinator --> Creators["Entity-specific validators, payloads, and readback"]
-  Coordinator --> Audit["QuickbooksSyncOperation"]
-  AuditRead --> Audit
-
-  ReadServices --> Client["Quickbooks::Client"]
-  Creators --> Client
-  Client --> Sandbox["QuickBooks Online sandbox"]
-  Client --> Connection["Encrypted QuickbooksConnection"]
-
-  Audit --> Database[(PostgreSQL)]
-  Connection --> Database
+flowchart LR
+  Browser["Browser / Swagger UI"] --> Rails["Rails controllers"]
+  Rails --> Domain["Entity-specific Submit and Create objects"]
+  Domain --> Client["Quickbooks::Client"]
+  Client --> QBO["QuickBooks Online sandbox"]
+  QBO --> Client
+  Client --> Verify["Readback and response verification"]
+  Verify --> Browser
+  Rails --> Session["Signed/encrypted Rails session: opaque connection UUID only"]
+  Rails --> Store["Dedicated process-local MemoryStore"]
+  Store --> Tokens["SandboxConnection: realm and OAuth tokens"]
 ```
+
+Swagger never calls Intuit directly. It has no bearer scheme or authorization control. It uses same-origin Rails
+routes, the current Rails session, and Rails CSRF protection. OAuth tokens never enter HTML, JavaScript, OpenAPI,
+cookies, JSON responses, or URL parameters.
+
+## Process-local connection
+
+`Quickbooks::SandboxConnection` is an immutable plain Ruby value with:
+
+- opaque UUID;
+- validated numeric realm ID;
+- access and refresh tokens;
+- access-token and optional refresh-token expiry;
+- sandbox environment marker;
+- creation, update, and refresh timestamps.
+
+It has no persistence behavior or public serialization. Its inspection output redacts both tokens.
+
+`Quickbooks::SandboxConnectionStore` encapsulates a dedicated
+`ActiveSupport::Cache::MemoryStore`. Controllers and clients never access the cache directly. The store creates,
+fetches, replaces, refreshes, disconnects, and deletes connections through a narrow domain API.
+
+One store instance is configured per Rails process. Development reload invokes Rails' preparation callback and
+may replace the store. A restart, reload, process replacement, or cache eviction therefore requires reconnecting.
+
+## Session ownership
+
+After a successful OAuth callback, Rails stores only the connection UUID in the browser session. Connection-scoped
+routes require the route UUID to match that session UUID before looking in the process store. Invalid, mismatched,
+or missing handles do not reveal whether another handle exists; the API returns HTTP 401 with
+`quickbooks_reconnect_required`.
+
+OAuth state remains time-limited, single-use, and compared with a constant-time helper.
+
+## Refresh and disconnect synchronization
+
+MemoryStore makes individual cache operations thread-safe, but a token refresh is a compound operation. The store
+therefore keeps a mutex per connection and synchronizes access to that mutex registry.
+
+Within the connection lock, refresh:
+
+1. fetches the current value again;
+2. checks whether another thread already rotated the tokens;
+3. checks expiry again;
+4. calls Intuit refresh at most once;
+5. builds a new immutable connection;
+6. replaces the cached value before releasing the lock.
+
+Disconnect uses the same lock, fetches the latest rotated refresh token, revokes it, and deletes the local value.
+A disconnect cannot leave a late refresh behind, and a refresh cannot recreate a deleted connection. Lock entries
+are removed when no owner or waiter remains.
+
+## Finance request flow
+
+The API has 17 finance GET operations and 11 finance POST operations.
+
+GET operations may refresh an expired token and may make one authenticated retry after a QuickBooks 401.
+
+Each POST:
+
+1. resolves the session-owned process-local connection;
+2. permits a bounded entity-specific input shape;
+3. normalizes ISO dates and decimal strings;
+4. validates accounting and current QuickBooks references;
+5. generates one UUID inside `Quickbooks::Client#post`;
+6. sends one QBO POST with that UUID as `requestid`;
+7. reads the created entity back;
+8. verifies and serializes the readback;
+9. returns the entity with HTTP 201.
+
+POST has no automatic retry. There is no caller idempotency key, request digest, replay response, local submission
+state, or audit record.
+
+Create-time duplicate-name preflight is intentionally absent. Repeated POST execution can create duplicate
+records. QuickBooks remains free to enforce its own constraints.
 
 ## Responsibilities
 
-- `Quickbooks::ConnectionsController`: connect/disconnect OAuth and show company information.
-- `Quickbooks::JournalEntriesController`: render only the dashboard shell and API URLs; it performs no QuickBooks data exchange.
-- `Quickbooks::OperationsController`: render only the separate workforce/tax/inventory shell and four API URLs.
-- `Quickbooks::TransactionsController`: render only the sales/payables shell and six API URLs.
-- `ApiDocsController`: render the separate Swagger page and serve the checked-in OpenAPI YAML; it performs no QuickBooks data exchange.
-- `Api::V1::Quickbooks::AccountsController`: JSON GET for eligible active Accounts.
-- `Api::V1::Quickbooks::FinancialReportsController`: five fixed JSON GET actions for Profit & Loss, Balance
-  Sheet, Cash Flow, General Ledger, and Trial Balance; it accepts only documented parameters and delegates work.
-- `Api::V1::Quickbooks::JournalEntriesController`: JSON GET/POST for Journal Entries.
-- `Api::V1::Quickbooks::JournalEntryOperationsController`: paginated/date-filtered JSON GET for connection-scoped
-  local audit operations; it does not call QuickBooks.
-- `Api::V1::Quickbooks::EmployeesController`, `TimeActivitiesController`, `TaxCodesController`, and
-  `InventoryItemsController`: explicit GET/POST HTTP boundaries for workforce, tax, and inventory data.
-- `CustomersController`, `VendorsController`, `InvoicesController`, `BillsController`,
-  `CustomerPaymentsController`, and `BillPaymentsController`: explicit GET/POST boundaries for sales and payables.
-- `Quickbooks::JournalEntries::AuditSerializer`: exposes the safe audit projection while excluding idempotency keys, digests, token data, and raw result payloads.
-- `app/assets/javascripts/financial_records.js`: calls the nine financial-record operations, renders one selected financial
-  statement plus QuickBooks/local audit data, sends statement dates/basis and transaction-date/page parameters,
-  loads Journal Entry/audit pages independently, derives memo/status-filtered arrays from loaded pages, exports
-  three safe CSV projections, holds one UUID idempotency key per intended submission, submits JSON with the Rails
-  CSRF token, and turns normalized failures into one dismissible alert plus an explicit unavailable state.
-- `app/assets/javascripts/operational_capabilities.js`: calls four operational GET APIs independently, renders their
-  tables and constrained selectors, holds one UUID per intended form submission, confirms all four real sandbox
-  writes, and exposes safe API failures without putting entity logic in the browser.
-- `app/assets/javascripts/accounting_transactions.js`: calls six sales and payables GET APIs independently, renders their
-  tables/reference choices, confirms each real sandbox write, and preserves a UUID per intended submission.
-- `app/assets/javascripts/api_docs.js`: initializes Swagger UI with GET-only interactive execution; POST remains documentation-only.
-- `Quickbooks::Accounts::Query`: GET active QuickBooks accounts for the two dropdowns.
-- `Quickbooks::Reports::Parameters`: validate exact report-specific ISO dates, the six-month period limit, and
-  Cash/Accrual only where Intuit supports it; build the native QuickBooks report query parameters.
-- `Quickbooks::Reports::Query`: map only five fixed report keys to fixed QuickBooks paths and issue the GET
-  through the existing client.
-- `Quickbooks::Reports::Parser` and `Serializer`: validate report metadata/decimal money strings, flatten nested
-  section/data/summary rows while preserving depth and column order, and emit the stable Rails JSON shape.
-- `Quickbooks::JournalEntries::ReadParameters`: parse and validate the shared ISO-date/page contract once for both
-  read APIs; calculate the QuickBooks one-based position and PostgreSQL offset.
-- `Quickbooks::JournalEntries::ReadPage`: immutable records, parameters, and `has_more` result used to render the
-  common pagination/filter metadata.
-- `Quickbooks::JournalEntries::Query`: apply transaction-date predicates and deterministic ordering to a
-  `STARTPOSITION`/`MAXRESULTS` QuickBooks query.
-- `Quickbooks::JournalEntries::AuditHistory`: apply the same transaction-date/page contract to the connection's
-  local audit rows using Active Record `where`, `order`, `offset`, `limit`, and `readonly`.
-- `Quickbooks::CreateSubmission`: narrow shared coordinator for connection-scoped UUID reservation, digest
-  matching, safe replay/refusal, and succeeded/rejected/uncertain audit state; it knows no entity payload fields.
-- Entity-specific `Submit`, `Create`, `Query`, `Details`, and `Serializer` classes under `Employees`,
-  `TimeActivities`, `TaxCodes`, `InventoryItems`, `Customers`, `Vendors`, `Invoices`, `Bills`,
-  `CustomerPayments`, and `BillPayments`: validate current QuickBooks references, build only the
-  documented payload, make the call through `Client`, and verify readback.
-- `Quickbooks::JournalEntries::Submit`: supplies Journal Entry metadata and its existing creator/serializer to the common coordinator.
-- `Quickbooks::JournalEntries::Create`: validate the form, validate selected active accounts, build two balanced lines, POST one Journal Entry, and GET it back by returned ID.
-- `Quickbooks::Client`: the only Faraday boundary; adds realm path, sandbox host, bearer/JSON headers, minor version, token refresh, timeouts, safe errors, and sanitized request instrumentation.
-- `QuickbooksConnection`: encrypted local OAuth tokens and connection state.
-- `QuickbooksSyncOperation`: local idempotency and audit evidence for one allowed create attempt, scoped by
-  connection and a fixed operation/entity pair; it stores no OAuth token or client secret.
+- Controllers handle HTTP parameters, status codes, session ownership, and normalized errors.
+- Eleven explicit `Submit` classes coordinate their matching create/readback/serializer flow.
+- Entity-specific `Create` classes own accounting validation, payload construction, and response verification.
+- `Quickbooks::Client` owns fixed sandbox HTTP infrastructure, token refresh, internal `requestid`, timeouts, and
+  sanitized upstream errors.
+- `Quickbooks::Oauth::TokenClient` owns token and revocation endpoints.
+- `SandboxConnectionStore` owns process-local token lifecycle and synchronization.
 
-The dashboard does not use local Account mappings; Journal Entries use currently active QuickBooks Account IDs.
+There is no generic service base class, repository layer, callback orchestration, or dynamic entity dispatcher.
 
-## Request boundaries
+## Database removal
 
-The QuickBooks client may refresh an expired token and retry one GET after a 401. Separately, each dashboard may
-retry its Rails GET once after a 500 ms delay when the safe response code is `quickbooks_timeout` or
-`quickbooks_unavailable`. POST refreshes before sending when the local token is expired, but neither Rails nor the
-browser automatically replays a POST after a failure because QuickBooks may already have committed the entity.
+The application does not load the Active Record railtie and has no Active Record models, `config/database.yml`,
+`db/` directory, direct `pg` dependency, database setup task, or database runtime check. Rails meta-gem
+dependencies may still include inactive Active Record components transitively.
 
-Every dashboard POST outcome triggers the related Rails GET projection or projections. A successful POST and its
-refresh are presented as separate facts. An errored POST also refreshes current native data without changing its
-audit status. Browser UUIDs rotate only for definitive invalid/rejected/reused-input states; pending and uncertain
-keys remain held for reconciliation.
+Existing PostgreSQL connection, mapping, idempotency, and audit records are intentionally abandoned. No migration
+path is provided.
 
-Financial reports are transient reads. Profit & Loss, Cash Flow, General Ledger, and Trial Balance accept periods
-no longer than six calendar months; Balance Sheet accepts one as-of date. The report parser preserves values rather than deriving
-totals, and no report payload is persisted or added to the Journal Entry audit ledger.
+## Deployment limits
 
-The audit-history GET is different from the financial GETs: it is an Active Record association query ordered by
-`created_at DESC, id DESC`, paginated by offset/limit, and optionally constrained by the original
-`request_payload.txn_date`. It remains available for retained audit history even if a connection is later
-disconnected, and it never instantiates `Quickbooks::Client`.
+Puma runs in single mode with normal thread concurrency. Worker configuration fails fast because separate
+processes would have unrelated connection stores. Multiple replicas are equally unsupported.
 
-The two GET APIs share one explicit read-parameter object rather than a repository or pagination framework.
-Both fetch `per_page + 1`, return only `per_page`, and use the extra row only to determine `has_more`. Direct API
-requests default to 50 records per page and are capped at 50; the dashboard deliberately requests 25. QuickBooks
-pages are ordered by `TxnDate DESC, Id DESC`. Local audit pages use their independent chronological ordering.
-
-Dashboard filtering and export span two read boundaries. Inclusive transaction dates reload page 1 from both
-servers; memo and audit status derive visible arrays from pages loaded in memory without mutating source values.
-The two **Load more** actions fetch independently and de-duplicate by connection-scoped entity/operation ID in
-the browser. CSV exports include only currently visible loaded records through temporary Blob URLs. CSV values
-are quoted and guarded against spreadsheet formula prefixes; decimal amount strings are copied unchanged rather
-than recalculated.
-
-Offset/`STARTPOSITION` pages are intentionally simple at this scale. A concurrent insertion can shift later
-offset pages; deterministic order plus browser ID de-duplication avoids showing a duplicate, but this is not a
-point-in-time snapshot export. A cursor/snapshot protocol should be designed explicitly if that audit property
-becomes necessary.
-
-The JSON create request accepts only date, memo, amount, debit Account ID, and credit Account ID, plus a required
-UUID `Idempotency-Key` header. The local audit reservation commits before the QuickBooks call; Rails never holds a
-database transaction open over external HTTP. `Create` rereads active accounts before POST, rejects the same
-account on both sides, excludes A/R and A/P, forwards the UUID as Intuit `requestid`, and reads the created
-transaction back before returning HTTP 201. Money is validated and calculated with `BigDecimal`; the outgoing
-QuickBooks JSON uses an exact decimal JSON number without conversion through Ruby `Float`.
-
-A repeated completed key with the same canonical five fields is served from the local normalized result with HTTP
-200. Different input or an unresolved/rejected operation returns HTTP 409 and does not call QuickBooks. Connection
-scope appears in both the unique database key and all entity lookup indexes; a QuickBooks entity ID is never
-treated as globally unique.
-
-The workforce, tax, and inventory create requests follow the same coordinator state machine while retaining
-entity-specific policy.
-Employee accepts names and optional contact data only. TimeActivity validates an active Employee and whole
-hours/minutes. TaxCode validates a unique name and existing active TaxRate. Inventory Item validates exact ISO
-date, decimal strings through `BigDecimal`, and currently eligible income/COGS/asset Accounts. Each creator owns
-its documented vendor payload and readback comparison; none of those fields or rules are generalized into the
-coordinator. No external HTTP call occurs inside a database transaction.
-
-The sales and payables APIs extend that state machine with six fixed operation/entity pairs. Customer and Vendor
-validate unique active display names. Invoice validates an active Customer and sale Item. Bill validates an active
-Vendor, expense Account, and Accounts Payable Account. Payment reloads one open Invoice and cannot exceed its
-balance. BillPayment reloads one open Bill plus an active bank Account, uses `PayType: Check`, and cannot exceed
-the Bill balance. Transaction creates are single-line by design, and every successful response is read back by
-returned ID.
-
-The failure UI stays inside the existing dashboard asset. It uses native HTML, CSS, and JavaScript; there is no
-toast library, frontend framework, event bus, or second error abstraction. Rails remains responsible for the
-normalized JSON error envelope, while the browser is responsible only for presenting the safe message.
-
-## Security
-
-- Sandbox only; production configuration fails closed.
-- Client secret and Active Record encryption keys live in encrypted Rails credentials or injected environment variables.
-- Access/refresh tokens are encrypted in PostgreSQL and never rendered or serialized.
-- OAuth state is random, one-time, expiring, and securely compared.
-- Request/response bodies and authorization headers are not logged.
-- CSV values are fully quoted and formula-trigger prefixes from QuickBooks/local text are neutralized before
-  download.
-- The dashboard is automatically enabled only in development; its non-development flag is not a replacement for user authentication.
+This architecture is for a local sandbox demonstration only. Production requires encrypted persistent token and
+realm storage, durable ownership, multi-process coordination, operational audit/recovery, and a new security
+review.

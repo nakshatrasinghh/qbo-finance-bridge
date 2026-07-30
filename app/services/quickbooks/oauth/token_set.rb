@@ -29,8 +29,8 @@ module Quickbooks
         end
 
         new(
-          access_token: access_token,
-          refresh_token: refresh_token,
+          access_token:,
+          refresh_token:,
           access_token_expires_at: now + access_lifetime,
           refresh_token_expires_at: refresh_lifetime ? now + refresh_lifetime : nil
         )
@@ -43,6 +43,33 @@ module Quickbooks
         integer if integer&.positive?
       end
       private_class_method :positive_integer
+
+      def inspect
+        "#<#{self.class.name} access_token=[FILTERED] refresh_token=[FILTERED] " \
+          "access_token_expires_at=#{access_token_expires_at.inspect} " \
+          "refresh_token_expires_at=#{refresh_token_expires_at.inspect}>"
+      end
+
+      def to_s = inspect
+
+      def pretty_print(printer)
+        printer.text(inspect)
+      end
+
+      def to_h
+        raise TypeError,
+              "#{self.class.name} contains secret token material and cannot be serialized."
+      end
+
+      def as_json(*)
+        raise TypeError,
+              "#{self.class.name} contains secret token material and cannot be serialized."
+      end
+
+      def to_json(*)
+        raise TypeError,
+              "#{self.class.name} contains secret token material and cannot be serialized."
+      end
     end
   end
 end

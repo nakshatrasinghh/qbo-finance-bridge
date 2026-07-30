@@ -11,6 +11,9 @@ normalization such as first, second, or third normal form. Some stages are more 
 projection, structural transformation, validation, filtering, or deduplication. They are documented together
 because all of them protect the downstream contract from QuickBooks-specific variability.
 
+Where a read parser detects a repeated upstream identifier, that is response-integrity validation only. The
+application does not query for an existing name before a create and does not prevent a deliberate repeated POST.
+
 The conceptual boundary is:
 
 ```text
@@ -135,8 +138,8 @@ This is two related operations:
 **Output invariant.** A caller sees the same documented fields regardless of additional fields QuickBooks may
 add to its upstream representation. Unknown fields do not leak through automatically.
 
-**Why it matters.** The Ruby bridge, rather than QuickBooks, owns the contract consumed by the MCP. Upstream
-schema growth therefore cannot silently increase the data exposed to an agent.
+**Why it matters.** The Ruby bridge, rather than QuickBooks, owns the stable contract consumed by the dashboards
+and API clients. Upstream schema growth therefore cannot silently increase the data exposed to callers.
 
 ### 2. Simplifying nested references
 
@@ -339,7 +342,7 @@ decimal `Money` cells.
 inconsistent upstream success becomes a safe `UnexpectedResponse` error instead of partial financial data.
 
 **Why it matters.** This is a **fail-closed integration boundary**. Missing values are not imputed, malformed
-financial values are not coerced to zero, and contradictory records are not passed to the MCP.
+financial values are not coerced to zero, and contradictory records are not returned to callers.
 
 ### 9. Turning nested reports into ordered rows
 

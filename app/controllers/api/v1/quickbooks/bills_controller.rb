@@ -3,22 +3,19 @@ module Api
     module Quickbooks
       class BillsController < BaseController
         def index
-          connection = QuickbooksConnection.find(params[:connection_id])
-          catalog = ::Quickbooks::Bills::Query.new(connection: connection).call
+          catalog = ::Quickbooks::Bills::Query.new(connection: @connection).call
 
           render json: ::Quickbooks::Bills::Serializer.catalog(catalog)
         end
 
         def create
-          connection = QuickbooksConnection.find(params[:connection_id])
           result =
             ::Quickbooks::Bills::Submit.new(
-              connection: connection,
-              idempotency_key: request.headers["Idempotency-Key"],
+              connection: @connection,
               attributes: bill_params.to_h
             ).call
 
-          render_create(result)
+          render json: { bill: result.bill }, status: :created
         end
 
         private
@@ -33,18 +30,6 @@ module Api
             :amount,
             :description
           )
-        end
-
-        def render_create(result)
-          response.set_header("Idempotency-Replayed", result.replayed.to_s)
-          render json: {
-                   bill: result.bill,
-                   idempotency: {
-                     replayed: result.replayed,
-                     operation_id: result.operation.id
-                   }
-                 },
-                 status: result.replayed ? :ok : :created
         end
       end
     end

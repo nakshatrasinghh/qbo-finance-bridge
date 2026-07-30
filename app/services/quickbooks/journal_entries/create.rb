@@ -15,7 +15,6 @@ module Quickbooks
         amount: nil,
         debit_account_id: nil,
         credit_account_id: nil,
-        request_id:,
         client: nil
       )
         @connection = connection
@@ -24,29 +23,20 @@ module Quickbooks
         @amount_input = amount.to_s.strip
         @debit_account_id = debit_account_id.to_s
         @credit_account_id = credit_account_id.to_s
-        @request_id = request_id
-        @client = client || Client.new(connection: connection)
-        @post_attempted = false
+        @client = client || Client.new(connection:)
       end
 
       def call
         validate_input!
         validate_accounts!
 
-        @post_attempted = true
-        response = client.post("journalentry", json: payload, params: { requestid: request_id })
-        @quickbooks_entity_id = response.dig("JournalEntry", "Id").to_s
+        response = client.post("journalentry", json: payload)
+        quickbooks_entity_id = response.dig("JournalEntry", "Id").to_s
         if quickbooks_entity_id.blank?
           raise_unexpected!("QuickBooks did not return the created JournalEntry ID.")
         end
 
         readback(quickbooks_entity_id)
-      end
-
-      attr_reader :quickbooks_entity_id
-
-      def post_attempted?
-        @post_attempted
       end
 
       private
@@ -57,7 +47,6 @@ module Quickbooks
                   :credit_account_id,
                   :debit_account_id,
                   :memo,
-                  :request_id,
                   :txn_date
 
       def validate_input!
@@ -81,7 +70,7 @@ module Quickbooks
       end
 
       def validate_accounts!
-        accounts = Accounts::Query.new(connection: connection, client: client).call.index_by(&:id)
+        accounts = Accounts::Query.new(connection:, client:).call.index_by(&:id)
         debit_account = accounts[debit_account_id]
         credit_account = accounts[credit_account_id]
         unless eligible?(debit_account)

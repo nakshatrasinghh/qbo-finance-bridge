@@ -3,8 +3,7 @@ module Api
     module Quickbooks
       class TimeActivitiesController < BaseController
         def index
-          connection = QuickbooksConnection.find(params[:connection_id])
-          activities = ::Quickbooks::TimeActivities::Query.new(connection: connection).call
+          activities = ::Quickbooks::TimeActivities::Query.new(connection: @connection).call
 
           render json: {
                    time_activities:
@@ -15,15 +14,13 @@ module Api
         end
 
         def create
-          connection = QuickbooksConnection.find(params[:connection_id])
           result =
             ::Quickbooks::TimeActivities::Submit.new(
-              connection: connection,
-              idempotency_key: request.headers["Idempotency-Key"],
+              connection: @connection,
               attributes: time_activity_params.to_h
             ).call
 
-          render_create(result)
+          render json: { time_activity: result.time_activity }, status: :created
         end
 
         private
@@ -36,18 +33,6 @@ module Api
             :minutes,
             :description
           )
-        end
-
-        def render_create(result)
-          response.set_header("Idempotency-Replayed", result.replayed.to_s)
-          render json: {
-                   time_activity: result.time_activity,
-                   idempotency: {
-                     replayed: result.replayed,
-                     operation_id: result.operation.id
-                   }
-                 },
-                 status: result.replayed ? :ok : :created
         end
       end
     end

@@ -21,12 +21,8 @@
 !/tmp/pids/
 !/tmp/pids/.keep
 
-# Ignore storage (uploaded files in development and any SQLite databases).
-/storage/*
-!/storage/.keep
-/tmp/storage/*
-!/tmp/storage/
-!/tmp/storage/.keep
+# Keep macOS metadata local.
+.DS_Store
 
 /public/assets
 .idea
@@ -43,6 +39,7 @@
 /docs/phase_status.md
 /docs/phases/
 /docs/decisions/
+/docs/superpowers/
 /docs/operator_handoff.md
 /docs/reference_review.md
 /docs/references.md

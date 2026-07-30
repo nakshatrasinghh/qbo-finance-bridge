@@ -22,13 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
     customerPayment: document.querySelector("[data-customer-payment-create-form]"),
     billPayment: document.querySelector("[data-bill-payment-create-form]")
   }
-  const keys = new WeakMap()
   const transientGetErrorCodes = new Set(["quickbooks_timeout", "quickbooks_unavailable"])
-  const renewableIdempotencyErrorCodes = new Set([
-    "idempotency_key_invalid",
-    "idempotency_key_reused",
-    "idempotency_request_rejected"
-  ])
   const state = {
     customers: [],
     vendors: [],
@@ -55,11 +49,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const csrfToken = () => document.querySelector("meta[name='csrf-token']")?.content
-  const idempotencyKey = (form) => {
-    if (!keys.has(form)) keys.set(form, window.crypto.randomUUID())
-    return keys.get(form)
-  }
-  const resetIdempotencyKey = (form) => keys.set(form, window.crypto.randomUUID())
 
   const apiRequest = async (url, options = {}, retryCount = 0) => {
     const headers = { Accept: "application/json", ...options.headers }
@@ -378,7 +367,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const submitCreate = async (settings) => {
-    const { form, scope, responseKey, fields, confirmMessage, successLabel, refresh, ready, localErrorCode } = settings
+    const { form, scope, responseKey, fields, confirmMessage, successLabel, refresh, ready } = settings
     if (!window.confirm(confirmMessage)) return
 
     clearAlert()
@@ -389,16 +378,12 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       data = await apiRequest(form.action, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey(form) },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formPayload(form, scope, fields))
       })
-      resetIdempotencyKey(form)
       form.reset()
     } catch (error) {
       postError = error
-      if (error.apiCode === localErrorCode || renewableIdempotencyErrorCodes.has(error.apiCode)) {
-        resetIdempotencyKey(form)
-      }
     }
 
     const refreshResult = await Promise.allSettled([refresh()]).then(([result]) => result)
@@ -408,7 +393,12 @@ document.addEventListener("DOMContentLoaded", () => {
         `The related GET refresh also failed: ${refreshResult.reason.message}`
       showAlert(
         `${successLabel} POST failed`,
-        new ApiError(`${postError.message} ${refreshMessage}`, postError.apiCode, postError.statusCode)
+        new ApiError(
+          `${postError.message} ${refreshMessage} Check QuickBooks before repeating the POST because a repeated ` +
+            "execution may create another record.",
+          postError.apiCode,
+          postError.statusCode
+        )
       )
       setStatus(`${successLabel} was not confirmed; its related GET APIs were attempted.`)
     } else if (refreshResult.status === "rejected") {
@@ -419,8 +409,8 @@ document.addEventListener("DOMContentLoaded", () => {
       setStatus(`${successLabel} ${data[responseKey].id} is confirmed; its related GET refresh failed.`)
     } else {
       setStatus(
-        `${successLabel} ${data[responseKey].id} was created, read back, and recorded as local operation ` +
-        `${data.idempotency.operation_id}. Its related GET APIs were refreshed.`
+        `${successLabel} ${data[responseKey].id} was created and verified by QuickBooks readback. ` +
+        "Its related GET APIs were refreshed."
       )
     }
 
@@ -439,8 +429,7 @@ document.addEventListener("DOMContentLoaded", () => {
       confirmMessage: "POST one real Customer list record to the QuickBooks sandbox?",
       successLabel: "Customer",
       refresh: () => Promise.all([loadCustomers(), loadInvoices()]),
-      ready: () => true,
-      localErrorCode: "quickbooks_customer_input_invalid"
+      ready: () => true
     })
   })
 
@@ -454,8 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
       confirmMessage: "POST one real Vendor list record to the QuickBooks sandbox?",
       successLabel: "Vendor",
       refresh: () => Promise.all([loadVendors(), loadBills()]),
-      ready: () => true,
-      localErrorCode: "quickbooks_vendor_input_invalid"
+      ready: () => true
     })
   })
 
@@ -469,8 +457,7 @@ document.addEventListener("DOMContentLoaded", () => {
       confirmMessage: "POST one real Invoice? This changes sandbox receivable and sales balances.",
       successLabel: "Invoice",
       refresh: () => Promise.all([loadInvoices(), loadCustomerPayments()]),
-      ready: () => state.customerChoices.length > 0 && state.itemChoices.length > 0,
-      localErrorCode: "quickbooks_invoice_input_invalid"
+      ready: () => state.customerChoices.length > 0 && state.itemChoices.length > 0
     })
   })
 
@@ -485,8 +472,7 @@ document.addEventListener("DOMContentLoaded", () => {
       successLabel: "Bill",
       refresh: () => Promise.all([loadBills(), loadBillPayments()]),
       ready: () => state.vendorChoices.length > 0 && state.expenseAccountChoices.length > 0 &&
-        state.payableAccountChoices.length > 0,
-      localErrorCode: "quickbooks_bill_input_invalid"
+        state.payableAccountChoices.length > 0
     })
   })
 
@@ -500,8 +486,7 @@ document.addEventListener("DOMContentLoaded", () => {
       confirmMessage: "POST one real Payment and apply it to the selected open Invoice?",
       successLabel: "Customer Payment",
       refresh: () => Promise.all([loadCustomerPayments(), loadInvoices()]),
-      ready: () => state.openInvoiceChoices.length > 0,
-      localErrorCode: "quickbooks_customer_payment_input_invalid"
+      ready: () => state.openInvoiceChoices.length > 0
     })
   })
 
@@ -515,8 +500,7 @@ document.addEventListener("DOMContentLoaded", () => {
       confirmMessage: "POST one real check-style BillPayment from the selected bank Account?",
       successLabel: "Bill Payment",
       refresh: () => Promise.all([loadBillPayments(), loadBills()]),
-      ready: () => state.openBillChoices.length > 0 && state.bankAccountChoices.length > 0,
-      localErrorCode: "quickbooks_bill_payment_input_invalid"
+      ready: () => state.openBillChoices.length > 0 && state.bankAccountChoices.length > 0
     })
   })
 

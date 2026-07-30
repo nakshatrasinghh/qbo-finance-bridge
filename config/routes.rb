@@ -42,7 +42,6 @@ Rails.application.routes.draw do
           resources :customer_payments, only: %i[index create]
           resources :bill_payments, only: %i[index create]
           resources :journal_entries, only: %i[index create]
-          resources :journal_entry_operations, only: :index
 
           get "reports/profit_and_loss",
               to: "financial_reports#profit_and_loss",

@@ -17,7 +17,6 @@ module Quickbooks
         income_account_id: nil,
         expense_account_id: nil,
         asset_account_id: nil,
-        request_id:,
         client: nil
       )
         @connection = connection
@@ -31,29 +30,20 @@ module Quickbooks
         @income_account_id = income_account_id.to_s
         @expense_account_id = expense_account_id.to_s
         @asset_account_id = asset_account_id.to_s
-        @request_id = request_id
-        @client = client || Client.new(connection: connection)
-        @post_attempted = false
+        @client = client || Client.new(connection:)
       end
 
       def call
         validate_input!
-        validate_catalog!
+        validate_accounts!
 
-        @post_attempted = true
-        response = client.post("item", json: payload, params: { requestid: request_id })
-        @quickbooks_entity_id = response.dig("Item", "Id").to_s
+        response = client.post("item", json: payload)
+        quickbooks_entity_id = response.dig("Item", "Id").to_s
         if quickbooks_entity_id.blank?
           raise_unexpected!("QuickBooks did not return the created inventory Item ID.")
         end
 
         readback(quickbooks_entity_id)
-      end
-
-      attr_reader :quickbooks_entity_id
-
-      def post_attempted?
-        @post_attempted
       end
 
       private
@@ -68,7 +58,6 @@ module Quickbooks
                   :name,
                   :purchase_cost,
                   :quantity_on_hand,
-                  :request_id,
                   :sku,
                   :unit_price
 
@@ -89,7 +78,7 @@ module Quickbooks
         @purchase_cost = optional_decimal(@purchase_cost_input, "Purchase cost")
 
         [income_account_id, expense_account_id, asset_account_id].each do |account_id|
-          unless account_id.match?(QuickbooksSyncOperation::ENTITY_ID_FORMAT)
+          unless EntityId.valid?(account_id)
             raise_input!("Choose valid QuickBooks inventory accounts.")
           end
         end
@@ -113,15 +102,17 @@ module Quickbooks
         decimal
       end
 
-      def validate_catalog!
-        catalog = Query.new(connection: connection, client: client).call
-        duplicate = catalog.items.any? { |item| item.name.casecmp?(name) }
-        raise_input!("A QuickBooks inventory Item with this name already exists.") if duplicate
-
+      def validate_accounts!
+        accounts = Accounts::Query.new(connection:, client:).call.index_by(&:id)
+        income_account = accounts[income_account_id]
+        expense_account = accounts[expense_account_id]
+        asset_account = accounts[asset_account_id]
         valid =
-          catalog.income_accounts.any? { |account| account.id == income_account_id } &&
-            catalog.expense_accounts.any? { |account| account.id == expense_account_id } &&
-            catalog.asset_accounts.any? { |account| account.id == asset_account_id }
+          income_account&.account_type == "Income" &&
+            income_account.account_subtype == "SalesOfProductIncome" &&
+            expense_account&.account_type == "Cost of Goods Sold" &&
+            asset_account&.account_type == "Other Current Asset" &&
+            asset_account.account_subtype == "Inventory"
         raise_input!("The selected inventory accounts are not eligible in QuickBooks.") unless valid
       end
 

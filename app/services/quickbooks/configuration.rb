@@ -11,11 +11,10 @@ module Quickbooks
 
     def validate!
       ensure_sandbox!
-      required_value!(:client_id, "QUICKBOOKS_CLIENT_ID")
-      required_value!(:client_secret, "QUICKBOOKS_CLIENT_SECRET")
-      required_value!(:redirect_uri, "QUICKBOOKS_REDIRECT_URI")
+      required_value!(client_id, "QUICKBOOKS_CLIENT_ID")
+      required_value!(client_secret, "QUICKBOOKS_CLIENT_SECRET")
+      required_value!(redirect_uri, "QUICKBOOKS_REDIRECT_URI")
       validate_redirect_uri!
-      validate_encryption!
       minor_version
       open_timeout
       read_timeout
@@ -78,11 +77,11 @@ module Quickbooks
       uri = URI(AUTHORIZATION_URL)
       uri.query =
         URI.encode_www_form(
-          client_id: client_id,
-          redirect_uri: redirect_uri,
+          client_id:,
+          redirect_uri:,
           response_type: "code",
           scope: ACCOUNTING_SCOPE,
-          state: state
+          state:
         )
       uri.to_s
     end
@@ -99,8 +98,8 @@ module Quickbooks
             )
     end
 
-    def required_value!(method_name, environment_name)
-      return if public_send(method_name).present?
+    def required_value!(value, environment_name)
+      return if value.present?
 
       raise Error::Configuration.new(
               "Missing #{environment_name} configuration.",
@@ -109,18 +108,6 @@ module Quickbooks
               details: {
                 setting: environment_name
               }
-            )
-    end
-
-    def validate_encryption!
-      %i[primary_key deterministic_key key_derivation_salt].each do |attribute|
-        ActiveRecord::Encryption.config.public_send(attribute)
-      end
-    rescue ActiveRecord::Encryption::Errors::Configuration
-      raise Error::Configuration.new(
-              "Active Record encryption keys are not configured.",
-              code: "active_record_encryption_not_configured",
-              http_status: :service_unavailable
             )
     end
 

@@ -10,8 +10,7 @@ Dir.chdir(root)
 command = ARGV.shift || "write"
 abort "Usage: bin/format [write|check]" unless %w[write check].include?(command) && ARGV.empty?
 
-ruby_files = Dir.glob("{app,config,db/migrate,lib}/**/*.rb")
-ruby_files << "db/seeds.rb"
+ruby_files = Dir.glob("{app,config,lib,test}/**/*.rb")
 ruby_files.concat(%w[Gemfile Rakefile config.ru])
 ruby_files.concat(
   Dir

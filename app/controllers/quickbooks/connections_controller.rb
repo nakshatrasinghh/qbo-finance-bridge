@@ -3,30 +3,37 @@ module Quickbooks
     OAUTH_STATE_SESSION_KEY = "quickbooks_oauth_state"
     OAUTH_STATE_TTL = 10.minutes
 
+    include ConnectionScoped
+
+    skip_before_action :set_quickbooks_connection, only: %i[index connect callback]
     before_action :set_callback_security_headers, only: :callback
 
     rescue_from Error, with: :redirect_quickbooks_error
-    rescue_from ActiveRecord::RecordInvalid,
-                ActiveRecord::RecordNotUnique,
-                with: :redirect_persistence_error
+    rescue_from Error::ReconnectRequired, with: :render_reconnect_required
 
     def index
-      @connections = QuickbooksConnection.order(updated_at: :desc).limit(20)
+      @connection = session_quickbooks_connection
       @configuration_error = configuration_error
     end
 
     def show
-      @connection = QuickbooksConnection.find(params[:id])
-      return unless @connection.connected?
-
       @company_info = CompanyInfo::Fetch.new(connection: @connection).call
+    rescue Error::ReconnectRequired
+      raise
     rescue Error => error
       @quickbooks_error = error
     end
 
     def connect
+      connection = session_quickbooks_connection
+      if connection
+        redirect_to quickbooks_connection_path(connection.id),
+                    alert: "Disconnect the current sandbox before connecting another company."
+        return
+      end
+
       state = SecureRandom.urlsafe_base64(32)
-      authorization_url = configuration.authorization_url(state: state)
+      authorization_url = configuration.authorization_url(state:)
       session[OAUTH_STATE_SESSION_KEY] = {
         "value" => state,
         "expires_at" => OAUTH_STATE_TTL.from_now.to_i
@@ -39,18 +46,23 @@ module Quickbooks
       raise_oauth_denial! if params[:error].present?
 
       connection =
-        Oauth::ExchangeAuthorizationCode.new(configuration: configuration).call(
-          code: params[:code].to_s,
-          realm_id: params[:realmId].to_s
-        )
-      redirect_to quickbooks_connection_path(connection),
+        Oauth::ExchangeAuthorizationCode.new(
+          configuration:,
+          connection_store: quickbooks_connection_store
+        ).call(code: params[:code].to_s, realm_id: params[:realmId].to_s)
+      store_quickbooks_connection_session!(connection)
+      redirect_to quickbooks_connection_path(connection.id),
                   notice:
                     "QuickBooks sandbox connected. CompanyInfo was requested for verification."
     end
 
     def disconnect
-      connection = QuickbooksConnection.find(params[:id])
-      Oauth::Disconnect.new(connection: connection, configuration: configuration).call
+      Oauth::Disconnect.new(
+        connection_id: @connection.id,
+        configuration:,
+        connection_store: quickbooks_connection_store
+      ).call
+      clear_quickbooks_connection_session!
       redirect_to quickbooks_connections_path,
                   status: :see_other,
                   notice: "QuickBooks access was revoked and local tokens were cleared."
@@ -101,13 +113,6 @@ module Quickbooks
         "QuickBooks flow failed code=#{error.code} upstream_status=#{error.upstream_status || "none"}"
       )
       redirect_to quickbooks_connections_path, status: :see_other, alert: error.message
-    end
-
-    def redirect_persistence_error(error)
-      Rails.error.report(error, handled: true, severity: :warning)
-      redirect_to quickbooks_connections_path,
-                  status: :see_other,
-                  alert: "The QuickBooks connection could not be saved."
     end
   end
 end

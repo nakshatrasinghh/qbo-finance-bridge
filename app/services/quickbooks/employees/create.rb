@@ -11,24 +11,20 @@ module Quickbooks
         family_name: nil,
         email: nil,
         phone: nil,
-        request_id:,
         client: nil
       )
         @given_name = given_name.to_s.strip
         @family_name = family_name.to_s.strip
         @email = email.to_s.strip
         @phone = phone.to_s.strip
-        @request_id = request_id
-        @client = client || Client.new(connection: connection)
-        @post_attempted = false
+        @client = client || Client.new(connection:)
       end
 
       def call
         validate_input!
 
-        @post_attempted = true
-        response = client.post("employee", json: payload, params: { requestid: request_id })
-        @quickbooks_entity_id = response.dig("Employee", "Id").to_s
+        response = client.post("employee", json: payload)
+        quickbooks_entity_id = response.dig("Employee", "Id").to_s
         if quickbooks_entity_id.blank?
           raise_unexpected!("QuickBooks did not return the created Employee ID.")
         end
@@ -36,15 +32,9 @@ module Quickbooks
         readback(quickbooks_entity_id)
       end
 
-      attr_reader :quickbooks_entity_id
-
-      def post_attempted?
-        @post_attempted
-      end
-
       private
 
-      attr_reader :client, :email, :family_name, :given_name, :phone, :request_id
+      attr_reader :client, :email, :family_name, :given_name, :phone
 
       def validate_input!
         validate_name!(given_name, "Given name")
