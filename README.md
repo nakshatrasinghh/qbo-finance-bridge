@@ -47,6 +47,34 @@ The three HTML dashboards and Swagger call the same connection-scoped Rails endp
 `:connection_id` with the opaque handle shown on the connected-company page. POST creates a real sandbox record,
 and repeating a POST may create a duplicate.
 
+## Browser and internal API boundaries
+
+Rails exposes two QuickBooks API namespaces because browser requests and service-to-service requests have
+different authorization and connection-selection rules:
+
+| Consumer | Namespace | Connection selection | Allowed operations |
+| --- | --- | --- | --- |
+| Rails dashboards and Swagger | `/api/v1/quickbooks/connections/:connection_id/...` | The URL UUID must match the opaque UUID in the signed and encrypted Rails browser session | GET and the explicitly supported sandbox POST operations |
+| FastAPI/MCP backend | `/internal/v1/quickbooks/...` | Rails selects the current operator-managed, process-local connection; the caller supplies no UUID or cookie | GET only |
+
+The browser UUID is an opaque handle into Rails process memory. It is not a QuickBooks company ID, realm ID, or
+OAuth token. Requiring the URL handle to match the session handle prevents one browser session from selecting
+another session's connection. The internal API does not use this browser ownership model: FastAPI never copies or
+receives a Rails session cookie, connection UUID, realm ID, or QuickBooks credential.
+
+Add a new endpoint only to the namespace used by its consumer:
+
+- browser or Swagger operation: add it under `/api/v1/...`;
+- FastAPI/MCP read: add it under `/internal/v1/...`;
+- operation needed by both: expose two thin routes/controllers that share the same QuickBooks query and serializer;
+- write operation: keep it under `/api/v1/...`; never expose it through `/internal/v1/...`.
+
+The internal API is loopback-only in development and test and is disabled by default in production. It returns 404
+to unauthorized callers. Azure deployment requires workload-level service authentication before the internal API
+can be enabled; browser session authentication must not be reused for that purpose. Because the connection store is
+database-free, a Rails restart requires an operator to reconnect in the Rails UI, but FastAPI needs no copied value,
+restart, or reconfiguration.
+
 ## Finance API
 
 API contract version 2.0.0 contains exactly 28 finance operations:
@@ -151,6 +179,7 @@ Runtime settings:
 | `QUICKBOOKS_OPEN_TIMEOUT` | `5` | Connection timeout in seconds |
 | `QUICKBOOKS_READ_TIMEOUT` | `10` | Response timeout in seconds |
 | `ENABLE_QUICKBOOKS_CONNECTION_DASHBOARD` | development only | Explicitly expose the local dashboard outside development |
+| `QUICKBOOKS_INTERNAL_API_AUTH_MODE` | `loopback` outside production; `disabled` in production | Restrict or disable the FastAPI/MCP read API; production rejects `loopback` |
 
 Do not configure `WEB_CONCURRENCY`; this process-local design deliberately runs Puma in single mode.
 

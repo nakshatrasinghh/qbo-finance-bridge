@@ -153,6 +153,13 @@ module Quickbooks
           token_client.refresh(refresh_token: current.refresh_token)
         end
       ensure_connection_available!
+    rescue Error::Authentication => error
+      raise Error::ReconnectRequired.new(
+              "The QuickBooks sandbox connection is missing or expired. Reconnect QuickBooks.",
+              code: "quickbooks_reconnect_required",
+              http_status: :unauthorized,
+              upstream_status: error.upstream_status
+            )
     end
 
     def reload_connection!

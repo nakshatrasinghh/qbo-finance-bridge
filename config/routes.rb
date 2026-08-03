@@ -26,6 +26,33 @@ Rails.application.routes.draw do
     end
   end
 
+  namespace :internal do
+    namespace :v1 do
+      namespace :quickbooks do
+        resource :status, only: :show, controller: "status"
+        resources :accounts,
+                  :employees,
+                  :time_activities,
+                  :tax_codes,
+                  :inventory_items,
+                  :customers,
+                  :vendors,
+                  :invoices,
+                  :bills,
+                  :customer_payments,
+                  :bill_payments,
+                  :journal_entries,
+                  only: :index
+
+        get "reports/profit_and_loss", to: "financial_reports#profit_and_loss"
+        get "reports/balance_sheet", to: "financial_reports#balance_sheet"
+        get "reports/cash_flow", to: "financial_reports#cash_flow"
+        get "reports/general_ledger", to: "financial_reports#general_ledger"
+        get "reports/trial_balance", to: "financial_reports#trial_balance"
+      end
+    end
+  end
+
   namespace :api do
     namespace :v1 do
       namespace :quickbooks do

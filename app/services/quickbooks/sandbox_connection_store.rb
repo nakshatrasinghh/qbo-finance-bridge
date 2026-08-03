@@ -15,6 +15,8 @@ module Quickbooks
 
     def initialize
       @connections = ActiveSupport::Cache::MemoryStore.new(coder: nil)
+      @current_connection_id = nil
+      @current_connection_mutex = Mutex.new
       @lock_registry = {}
       @lock_registry_mutex = Mutex.new
     end
@@ -31,9 +33,23 @@ module Quickbooks
             refresh_token_expires_at: token_set.refresh_token_expires_at
           )
         if connections.write(cache_key(connection.id), connection, unless_exist: true)
+          activate(connection.id)
           return connection
         end
       end
+    end
+
+    def fetch_current
+      connection_id = current_connection_mutex.synchronize { current_connection_id }
+      return unless connection_id
+
+      connection = fetch(connection_id)
+      clear_current(connection_id) unless connection
+      connection
+    end
+
+    def fetch_current!
+      fetch_current || raise_reconnect_required!
     end
 
     def fetch(connection_id)
@@ -55,6 +71,9 @@ module Quickbooks
         replacement = current.with_refreshed_tokens(token_set: yield(current))
         connections.write(cache_key(current.id), replacement)
         replacement
+      rescue Error::Authentication
+        delete_connection(connection.id)
+        raise
       end
     end
 
@@ -62,7 +81,15 @@ module Quickbooks
       synchronize(connection_id) do
         connection = fetch!(connection_id)
         yield(connection)
-        connections.delete(cache_key(connection_id))
+        delete_connection(connection_id)
+        connection
+      end
+    end
+
+    def evict(connection_id)
+      synchronize(connection_id) do
+        connection = fetch(connection_id)
+        delete_connection(connection_id) if connection
         connection
       end
     end
@@ -73,7 +100,26 @@ module Quickbooks
 
     private
 
-    attr_reader :connections, :lock_registry, :lock_registry_mutex
+    attr_reader :connections,
+                :current_connection_id,
+                :current_connection_mutex,
+                :lock_registry,
+                :lock_registry_mutex
+
+    def activate(connection_id)
+      current_connection_mutex.synchronize { @current_connection_id = connection_id }
+    end
+
+    def clear_current(connection_id)
+      current_connection_mutex.synchronize do
+        @current_connection_id = nil if current_connection_id == connection_id
+      end
+    end
+
+    def delete_connection(connection_id)
+      connections.delete(cache_key(connection_id))
+      clear_current(connection_id)
+    end
 
     # Users counts the lock owner and all waiters. The registry entry is removed
     # only after no thread can still enter this connection's critical section.
