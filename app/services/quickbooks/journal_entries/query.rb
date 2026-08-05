@@ -22,7 +22,7 @@ module Quickbooks
             entry = Details.from_payload(payload)
             valid =
               entry.id.present? && entry.txn_date.match?(/\A\d{4}-\d{2}-\d{2}\z/) &&
-                entry.lines.any?
+                entry.lines.present?
             raise_unexpected! unless valid
 
             entry
@@ -45,7 +45,7 @@ module Quickbooks
         filters = []
         filters << "TxnDate >= '#{parameters.txn_date_from.iso8601}'" if parameters.txn_date_from
         filters << "TxnDate <= '#{parameters.txn_date_to.iso8601}'" if parameters.txn_date_to
-        parts << "WHERE #{filters.join(" AND ")}" if filters.any?
+        parts << "WHERE #{filters.join(" AND ")}" if filters.present?
         parts << "ORDERBY TxnDate DESC, Id DESC"
         parts << "STARTPOSITION #{parameters.start_position} MAXRESULTS #{parameters.query_limit}"
         parts.join(" ")

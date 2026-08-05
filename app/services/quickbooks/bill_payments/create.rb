@@ -60,7 +60,7 @@ module Quickbooks
       def load_references!
         catalog = Query.new(connection:, client:).call
         @bill = catalog.open_bills.find { |candidate| candidate.id == bill_id }
-        bank_valid = catalog.bank_accounts.any? { |account| account.id == bank_account_id }
+        bank_valid = catalog.bank_accounts.find { |account| account.id == bank_account_id }.present?
         unless bill && bank_valid
           raise_input!("The selected Bill is not open or the bank Account is not active.")
         end

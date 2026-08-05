@@ -79,10 +79,12 @@ module Quickbooks
 
       def validate_references!
         catalog = Query.new(connection:, client:).call
-        valid =
-          catalog.vendors.any? { |vendor| vendor.id == vendor_id } &&
-            catalog.expense_accounts.any? { |account| account.id == expense_account_id } &&
-            catalog.payable_accounts.any? { |account| account.id == payable_account_id }
+        vendor_valid = catalog.vendors.find { |vendor| vendor.id == vendor_id }.present?
+        expense_account_valid =
+          catalog.expense_accounts.find { |account| account.id == expense_account_id }.present?
+        payable_account_valid =
+          catalog.payable_accounts.find { |account| account.id == payable_account_id }.present?
+        valid = vendor_valid && expense_account_valid && payable_account_valid
         unless valid
           raise_input!("The selected Vendor or Accounts are not currently eligible in QuickBooks.")
         end

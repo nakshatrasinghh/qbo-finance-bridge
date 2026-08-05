@@ -25,7 +25,7 @@ Rails.application.configure do
     config.action_controller.perform_caching = false
   end
 
-  # Change to :null_store to avoid any caching.
+  # Change to :null_store to disable caching.
   config.cache_store = :memory_store
 
   # Don't care if the mailer can't send.
@@ -55,7 +55,7 @@ Rails.application.configure do
   # Annotate rendered view with file names.
   config.action_view.annotate_rendered_view_with_filenames = true
 
-  # Uncomment if you wish to allow Action Cable access from any origin.
+  # Uncomment if you wish to allow Action Cable access from all origins.
   # config.action_cable.disable_request_forgery_protection = true
 
   # Raise error when a before_action's only/except options reference missing actions.

@@ -126,10 +126,13 @@ module Quickbooks
         valid =
           entry.id == id && entry.txn_date == txn_date.iso8601 && entry.balanced? &&
             expected_lines.all? do |posting_type, account_id|
-              entry.lines.any? do |line|
-                line.posting_type == posting_type && line.account_id == account_id &&
-                  line.amount == amount
-              end
+              entry
+                .lines
+                .find do |line|
+                  line.posting_type == posting_type && line.account_id == account_id &&
+                    line.amount == amount
+                end
+                .present?
             end
         unless valid
           raise_unexpected!("QuickBooks JournalEntry readback did not match the submitted record.")

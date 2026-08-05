@@ -81,9 +81,14 @@ module Quickbooks
           Customers::Query
             .new(connection:, client:)
             .call
-            .any? { |customer| customer.id == customer_id }
+            .find { |customer| customer.id == customer_id }
+            .present?
         item_valid =
-          Items::SalesChoices.new(connection:, client:).call.any? { |item| item.id == item_id }
+          Items::SalesChoices
+            .new(connection:, client:)
+            .call
+            .find { |item| item.id == item_id }
+            .present?
         unless customer_valid && item_valid
           raise_input!("The selected Customer or sales Item is not currently active in QuickBooks.")
         end
