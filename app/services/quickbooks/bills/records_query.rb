@@ -31,7 +31,7 @@ module Quickbooks
 
             bill
           end
-          .sort_by { |bill| [bill.txn_date, bill.id.to_i] }
+          .sort_by { |bill| [bill.txn_date, bill.id] }
           .reverse
           .freeze
       end

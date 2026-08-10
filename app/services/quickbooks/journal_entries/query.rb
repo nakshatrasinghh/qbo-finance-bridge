@@ -20,9 +20,7 @@ module Quickbooks
             raise_unexpected! unless payload.is_a?(Hash) && payload["Line"].is_a?(Array)
 
             entry = Details.from_payload(payload)
-            valid =
-              entry.id.present? && entry.txn_date.match?(/\A\d{4}-\d{2}-\d{2}\z/) &&
-                entry.lines.present?
+            valid = entry.id.present? && valid_date?(entry.txn_date) && entry.lines.present?
             raise_unexpected! unless valid
 
             entry
@@ -49,6 +47,12 @@ module Quickbooks
         parts << "ORDERBY TxnDate DESC, Id DESC"
         parts << "STARTPOSITION #{parameters.start_position} MAXRESULTS #{parameters.query_limit}"
         parts.join(" ")
+      end
+
+      def valid_date?(value)
+        Date.iso8601(value).iso8601 == value
+      rescue Date::Error
+        false
       end
 
       def raise_unexpected!

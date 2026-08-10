@@ -36,6 +36,7 @@
 /.agents/
 /.codex/
 /skills/
+/skills-lock.json
 /docs/phase_status.md
 /docs/phases/
 /docs/decisions/

@@ -74,6 +74,7 @@ module Quickbooks
           faraday.request :url_encoded if form_encoded
           faraday.options.open_timeout = configuration.open_timeout
           faraday.options.timeout = configuration.read_timeout
+          faraday.options.write_timeout = configuration.read_timeout
           faraday.adapter Faraday.default_adapter
         end
       end

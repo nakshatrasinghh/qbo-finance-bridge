@@ -52,6 +52,7 @@ module Quickbooks
       Faraday.new(url: configuration.api_base_url) do |faraday|
         faraday.options.open_timeout = configuration.open_timeout
         faraday.options.timeout = configuration.read_timeout
+        faraday.options.write_timeout = configuration.read_timeout
         faraday.adapter Faraday.default_adapter
       end
     end

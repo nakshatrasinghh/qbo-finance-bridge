@@ -10,6 +10,17 @@ class RuntimeCompatibilityTest < ActiveSupport::TestCase
     refute Rails.root.join("config/database.yml").exist?
   end
 
+  test "boots without unused job mailer and cable frameworks" do
+    loaded_railties = Rails.application.railties.map { _1.class.name }
+
+    refute_includes loaded_railties, "ActiveJob::Railtie"
+    refute_includes loaded_railties, "ActionMailer::Railtie"
+    refute_includes loaded_railties, "ActionCable::Engine"
+    refute Rails.root.join("app/jobs/application_job.rb").exist?
+    refute Rails.root.join("app/mailers/application_mailer.rb").exist?
+    refute Rails.root.join("config/cable.yml").exist?
+  end
+
   test "validates sandbox QuickBooks configuration without an external request" do
     configuration = Quickbooks::Configuration.new
 

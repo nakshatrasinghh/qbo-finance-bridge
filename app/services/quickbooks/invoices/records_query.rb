@@ -31,7 +31,7 @@ module Quickbooks
 
             invoice
           end
-          .sort_by { |invoice| [invoice.txn_date, invoice.id.to_i] }
+          .sort_by { |invoice| [invoice.txn_date, invoice.id] }
           .reverse
           .freeze
       end

@@ -28,7 +28,7 @@ module Quickbooks
 
             activity = Details.from_payload(payload)
             valid =
-              EntityId.valid?(activity.id) && activity.txn_date.match?(/\A\d{4}-\d{2}-\d{2}\z/) &&
+              EntityId.valid?(activity.id) && valid_date?(activity.txn_date) &&
                 activity.employee_id.present? && activity.hours.is_a?(Integer) &&
                 activity.minutes.is_a?(Integer)
             raise_unexpected! unless valid
@@ -41,6 +41,12 @@ module Quickbooks
       private
 
       attr_reader :client
+
+      def valid_date?(value)
+        Date.iso8601(value).iso8601 == value
+      rescue Date::Error
+        false
+      end
 
       def raise_unexpected!
         raise Error::UnexpectedResponse.new(

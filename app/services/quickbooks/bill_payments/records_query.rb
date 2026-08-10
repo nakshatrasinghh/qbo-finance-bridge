@@ -37,7 +37,7 @@ module Quickbooks
 
             payment
           end
-          .sort_by { |payment| [payment.txn_date, payment.id.to_i] }
+          .sort_by { |payment| [payment.txn_date, payment.id] }
           .reverse
           .freeze
       end

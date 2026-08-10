@@ -50,6 +50,7 @@ module Quickbooks
           configuration:,
           connection_store: quickbooks_connection_store
         ).call(code: params[:code].to_s, realm_id: params[:realmId].to_s)
+      reset_session
       store_quickbooks_connection_session!(connection)
       redirect_to quickbooks_connection_path(connection.id),
                   notice:

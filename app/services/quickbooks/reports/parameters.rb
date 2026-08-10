@@ -103,7 +103,7 @@ module Quickbooks
 
         def validate_period!(start_date, end_date)
           invalid!("end_date must be after start_date.") if end_date <= start_date
-          return unless end_date > start_date.next_month(6)
+          return unless start_date < end_date.prev_month(6)
 
           invalid!("Financial report date ranges cannot exceed six calendar months.")
         end
