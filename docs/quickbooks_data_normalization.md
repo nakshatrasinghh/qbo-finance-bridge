@@ -92,7 +92,7 @@ The bridge returns:
 ```
 
 The entity parser and serializer are implemented in
-[`Invoices::Details`](../app/services/quickbooks/invoices/details.rb) and
+[`Invoices::Details`](../app/models/quickbooks/invoices/details.rb) and
 [`Invoices::Serializer`](../app/services/quickbooks/invoices/serializer.rb).
 
 ## Technical terms used in this document
@@ -419,7 +419,7 @@ positionally with the columns, and hierarchy can be reconstructed for supported 
 **Why it matters.** Downstream callers can process a report deterministically without implementing QuickBooks'
 recursive report grammar. Rails preserves QuickBooks-provided totals; it does not recalculate them.
 
-See [`Reports::Details`](../app/services/quickbooks/reports/details.rb) and
+See [`Reports::Details`](../app/models/quickbooks/reports/details.rb) and
 [`Reports::Serializer`](../app/services/quickbooks/reports/serializer.rb).
 
 ### 10. Combining and cleaning tax data
@@ -466,7 +466,7 @@ order.
 **Why it matters.** Downstream callers receive a reproducible, internally consistent tax catalog even when
 QuickBooks repeats records across query results.
 
-See [`TaxCodes::Details`](../app/services/quickbooks/tax_codes/details.rb),
+See [`TaxCodes::Details`](../app/models/quickbooks/tax_codes/details.rb),
 [`TaxCodes::Query`](../app/services/quickbooks/tax_codes/query.rb), and
 [`TaxCodes::Serializer`](../app/services/quickbooks/tax_codes/serializer.rb).
 

@@ -96,6 +96,9 @@ records. QuickBooks remains free to enforce its own constraints.
 ## Responsibilities
 
 - Controllers handle HTTP parameters, status codes, session ownership, and normalized errors.
+- Plain Ruby models under `app/models/quickbooks` represent immutable connection state, validated read
+  parameters, normalized QuickBooks records, and paginated results. They perform no external I/O and have no
+  persistence behavior.
 - Eleven explicit `Submit` classes coordinate their matching create/readback/serializer flow.
 - Entity-specific `Create` classes own accounting validation, payload construction, and response verification.
 - `Quickbooks::Client` owns fixed sandbox HTTP infrastructure, token refresh, internal `requestid`, timeouts, and
@@ -110,6 +113,8 @@ There is no generic service base class, repository layer, callback orchestration
 The application does not load the Active Record railtie and has no Active Record models, `config/database.yml`,
 `db/` directory, direct `pg` dependency, database setup task, or database runtime check. Rails meta-gem
 dependencies may still include inactive Active Record components transitively.
+The objects under `app/models/quickbooks` are plain Ruby models and do not imply a database or
+`ApplicationRecord`.
 
 Existing PostgreSQL connection, mapping, idempotency, and audit records are intentionally abandoned. No migration
 path is provided.
